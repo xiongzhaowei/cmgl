@@ -1,0 +1,26 @@
+﻿add_subdirectory("egl")
+add_subdirectory("gles2")
+add_subdirectory("microsoft")
+add_subdirectory("source")
+target_sources(${PROJECT_NAME} PRIVATE
+    defines.h
+    Framebuffer.h
+    RenderContext.cpp
+    RenderContext.h
+    Renderer.cpp
+    Renderer.h
+    RenderFactory.cpp
+    RenderFactory.h
+    RenderFilter.cpp
+    RenderFilter.h
+    RenderLayer.cpp
+    RenderLayer.h
+    RenderObject.cpp
+    RenderObject.h
+    RenderThread.cpp
+    RenderThread.h
+    Resource.h
+    Texture.h
+    VideoSource.cpp
+    VideoSource.h
+)
