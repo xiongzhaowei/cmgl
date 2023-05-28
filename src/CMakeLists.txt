@@ -1,6 +1,4 @@
 ﻿
-project(cmgl LANGUAGES C)
-
 add_library(${PROJECT_NAME} STATIC)
 
 add_subdirectory("ffmpeg")
