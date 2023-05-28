@@ -7,7 +7,7 @@ extern "C" IMAGE_DOS_HEADER __ImageBase;
 
 OMP_UI_WINDOWS_USING_NAMESPACE
 
-PlatformWindow::Style::Style(HINSTANCE hInstance, std::wstring className, std::wstring title, uint32_t style, uint32_t exStyle, uint32_t classStyle) : _instance(hInstance), _className(className), _title(title), _style(style), _exStyle(exStyle), _classStyle(classStyle) {
+PlatformWindow::Style::Style(HINSTANCE hInstance, std::basic_string<TCHAR> className, std::basic_string<TCHAR> title, uint32_t style, uint32_t exStyle, uint32_t classStyle) : _instance(hInstance), _className(className), _title(title), _style(style), _exStyle(exStyle), _classStyle(classStyle) {
 	WNDCLASSEX wcex = { sizeof(WNDCLASSEX) };
 
 	wcex.style = _classStyle;
@@ -28,8 +28,8 @@ PlatformWindow::Style::~Style() {
 }
 
 PlatformWindow::Style* PlatformWindow::Style::create(
-	std::wstring className,
-	std::wstring title,
+	std::basic_string<TCHAR> className,
+	std::basic_string<TCHAR> title,
 	bool doubleClick,
 	bool minimize,
 	bool maximize,

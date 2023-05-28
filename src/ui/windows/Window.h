@@ -78,15 +78,15 @@ private:
 
 class PlatformWindow::Style : public Object {
 	HINSTANCE _instance;
-	std::wstring _className;
-	std::wstring _title;
+	std::basic_string<TCHAR> _className;
+	std::basic_string<TCHAR> _title;
 	uint32_t _style;
 	uint32_t _exStyle;
 	uint32_t _classStyle;
 public:
 	static Style* create(
-		std::wstring className,
-		std::wstring title,
+		std::basic_string<TCHAR> className,
+		std::basic_string<TCHAR> title,
 		bool doubleClick,
 		bool minimize,
 		bool maximize,
@@ -95,12 +95,12 @@ public:
 		bool layeredWindow
 	);
 
-	Style(HINSTANCE hInstance, std::wstring className, std::wstring title, uint32_t style, uint32_t exStyle, uint32_t classStyle);
+	Style(HINSTANCE hInstance, std::basic_string<TCHAR> className, std::basic_string<TCHAR> title, uint32_t style, uint32_t exStyle, uint32_t classStyle);
 	~Style();
 
 	HINSTANCE instance() const { return _instance; }
-	std::wstring className() const { return _className; }
-	std::wstring title() const { return _title; }
+	std::basic_string<TCHAR> className() const { return _className; }
+	std::basic_string<TCHAR> title() const { return _title; }
 	uint32_t style() const { return _style; }
 	uint32_t exStyle() const { return _exStyle; }
 	uint32_t classStyle() const { return _classStyle; }
