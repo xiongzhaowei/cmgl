@@ -28,7 +28,7 @@ Movie::~Movie() {
     if (_format) avformat_close_input(&_format);
 }
 
-Movie* Movie::from(const std::string& url, std::function<void(AVFrame*)> callback) {
+Movie* Movie::from(const std::string& url, RefPtr<render::VideoSource> source, std::function<void()> callback) {
     AVFormatContext* format = nullptr;
     Stream* audio = nullptr;
     Stream* video = nullptr;
@@ -41,7 +41,7 @@ Movie* Movie::from(const std::string& url, std::function<void(AVFrame*)> callbac
                 if (codec_type == AVMEDIA_TYPE_AUDIO && nullptr == audio) {
                     audio = Stream::from(stream, AudioRenderer::from(stream, mutex));
                 } else if (codec_type == AVMEDIA_TYPE_VIDEO && nullptr == video) {
-                    video = Stream::from(stream, VideoRenderer::from(stream, callback));
+                    video = Stream::from(stream, VideoRenderer::from(stream, source, callback));
                 }
             }
             if (audio || video) {
@@ -62,14 +62,14 @@ void Movie::play(bool state) {
 
 void Movie::seek(double time, std::function<void()> callback) {
     runOnThread([this, time, callback]() {
-        if (_format) {
-            int64_t ts = std::clamp<int64_t>(time * AV_TIME_BASE, 0, _format->duration);
+        if (!_format) return;
 
-            if (avformat_seek_file(_format, -1, 0, ts, _format->duration, 0) >= 0) {
-                _audio->consumer()->clear();
-                _video->consumer()->clear();
-                runOnThread(callback);
-            }
+        int64_t ts = std::clamp<int64_t>(time * AV_TIME_BASE, 0, _format->duration);
+
+        if (avformat_seek_file(_format, -1, 0, ts, _format->duration, 0) >= 0) {
+            _audio->consumer()->clear();
+            _video->consumer()->clear();
+            runOnThread(callback);
         }
     });
 }
@@ -85,18 +85,24 @@ void Movie::run() {
     static constexpr double kMaxCacheDuration = 0.1;
 
     if (!_audio && !_video) return;
-    if (_audio && _video) {
-        _audio->consumer()->attach(_video->consumer());
-    } else if (_video) {
-        // TODO: 缺少音频时使用视频同步
+
+    RefPtr<Stream> master;
+    if (_audio) {
+        master = _audio;
+        if (_video) {
+            _audio->consumer()->attach(_video->consumer());
+        }
+    } else {
+        master = _video;
     }
+    assert(master != nullptr);
 
     AVPacket* packet = av_packet_alloc();
     AVFrame* frame = av_frame_alloc();
 
     bool isRunning = true;
     while (isRunning) {
-        while (_audio->consumer()->duration() < kMaxCacheDuration) {
+        while (master->consumer()->duration() < kMaxCacheDuration) {
             if (av_read_frame(_format, packet) >= 0) {
                 AVStream* stream = _format->streams[packet->stream_index];
                 if (_audio && _audio->stream() == stream) {
@@ -119,10 +125,8 @@ void Movie::run() {
             task();
         }
         list.clear();
-        _mutex->wait([this]() -> bool {
-            if ((!_audio || _audio->consumer()->duration() < kMaxCacheDuration) && (!_video || _video->consumer()->duration() < kMaxCacheDuration)) return true;
-            if (!_taskQueue.empty()) return true;
-            return false;
+        _mutex->wait([this, master]() -> bool {
+            return master->consumer()->duration() < kMaxCacheDuration || !_taskQueue.empty();
         });
     }
     av_frame_free(&frame);

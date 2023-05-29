@@ -9,6 +9,6 @@ pip install cmake
 mkdir %~dp0build\project
 cd %~dp0build\project
 
-cmake -B . %~dp0
+cmake -DCMAKE_INSTALL_PREFIX=%~dp0build\project\out -B . %~dp0
 
 pause

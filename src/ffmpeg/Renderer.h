@@ -19,12 +19,13 @@ public:
     void clear() override;
     double duration() const override;
 
-    static RefPtr<VideoRenderer> from(AVStream* stream, std::function<void(AVFrame*)> callback);
+    static RefPtr<VideoRenderer> from(AVStream* stream, RefPtr<render::VideoSource> source, std::function<void()> callback);
 private:
     double _timebase;
     RefPtr<VideoConverter> _converter;
-    std::list<AVFrame*> _videoFrameList;
-    std::function<void(AVFrame*)> _callback;
+    std::list<AVFrame*> _frameList;
+    RefPtr<render::VideoSource> _source;
+    std::function<void()> _callback;
 };
 
 class AudioRenderer : public Movie::Consumer {
@@ -52,7 +53,7 @@ public:
 private:
     double _timebase;
     RefPtr<AudioConverter> _converter;
-    std::queue<AVFrame*> _audioFrameQueue;
+    std::list<AVFrame*> _frameList;
     RefPtr<Mutex> _mutex;
     RefPtr<Consumer> _video;
     SDL_AudioSpec _audioSpec = { 0 };

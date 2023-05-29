@@ -116,9 +116,9 @@ void AudioRenderer::fill(uint8_t* stream, int len) {
     AVFrame* frame = nullptr;
     {
         std::unique_lock<std::mutex> lock = _mutex->lock();
-        if (!_audioFrameQueue.empty()) {
-            frame = _audioFrameQueue.front();
-            _audioFrameQueue.pop();
+        if (!_frameList.empty()) {
+            frame = _frameList.front();
+            _frameList.pop_front();
         }
     }
 
@@ -151,25 +151,23 @@ void AudioRenderer::push(AVFrame* frame) {
     AVFrame* converted = _converter->convert(frame);
     if (converted) {
         std::unique_lock<std::mutex> lock = _mutex->lock();
-        _audioFrameQueue.push(converted);
+        _frameList.push_back(converted);
     }
 }
 
 void AudioRenderer::clear() {
-    std::queue<AVFrame*> queue;
+    std::list<AVFrame*> queue;
     {
         std::unique_lock<std::mutex> lock = _mutex->lock();
-        queue = std::move(_audioFrameQueue);
+        queue = std::move(_frameList);
     }
-    while (!queue.empty()) {
-        AVFrame* frame = queue.front();
-        queue.pop();
+    for (AVFrame* frame : queue) {
         av_frame_free(&frame);
     }
 }
 
 double AudioRenderer::duration() const {
-    return _audioFrameQueue.size() * _timebase * _audioSpec.samples;
+    return _frameList.size() * _timebase * _audioSpec.samples;
 }
 
 VideoRenderer::~VideoRenderer() {
@@ -180,10 +178,10 @@ void VideoRenderer::attach(Consumer* consumer) {
 }
 
 void VideoRenderer::sync(double pts) {
-    while (!_videoFrameList.empty()) {
+    while (!_frameList.empty()) {
         double display_pts = DBL_MAX;
         AVFrame* display_frame = nullptr;
-        for (AVFrame* frame : _videoFrameList) {
+        for (AVFrame* frame : _frameList) {
             double current = frame->best_effort_timestamp * _timebase;
             if (display_pts > current) {
                 display_frame = frame;
@@ -193,8 +191,10 @@ void VideoRenderer::sync(double pts) {
         if (display_frame == nullptr) break;
         if (display_pts > pts) break;
 
-        _videoFrameList.remove(display_frame);
-        _callback(display_frame);
+        _frameList.remove(display_frame);
+        _source->update(display_frame);
+        av_frame_free(&display_frame);
+        _callback();
     }
 }
 
@@ -204,21 +204,21 @@ void VideoRenderer::play(bool state) {
 
 void VideoRenderer::push(AVFrame* frame) {
     AVFrame* converted = _converter->convert(frame);
-    if (converted) _videoFrameList.push_back(converted);
+    if (converted) _frameList.push_back(converted);
 }
 
 void VideoRenderer::clear() {
-    std::list<AVFrame*> queue = std::move(_videoFrameList);
+    std::list<AVFrame*> queue = std::move(_frameList);
     for (AVFrame* frame : queue) {
         av_frame_free(&frame);
     }
 }
 
 double VideoRenderer::duration() const {
-    return _videoFrameList.size() * _timebase;
+    return _frameList.size() * _timebase;
 }
 
-RefPtr<VideoRenderer> VideoRenderer::from(AVStream* stream, std::function<void(AVFrame*)> callback) {
+RefPtr<VideoRenderer> VideoRenderer::from(AVStream* stream, RefPtr<render::VideoSource> source, std::function<void()> callback) {
     if (!stream) return nullptr;
 
     AVCodecParameters* codecpar = stream->codecpar;
@@ -227,6 +227,7 @@ RefPtr<VideoRenderer> VideoRenderer::from(AVStream* stream, std::function<void(A
     RefPtr<VideoRenderer> renderer = new VideoRenderer;
     renderer->_timebase = av_q2d(stream->time_base);
     renderer->_converter = VideoConverter::create(stream, AV_PIX_FMT_YUV420P);
+    renderer->_source = source;
     renderer->_callback = callback;
     return renderer;
 }

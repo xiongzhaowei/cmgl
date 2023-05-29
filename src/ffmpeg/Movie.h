@@ -28,7 +28,7 @@ public:
     void run();
     void runOnThread(std::function<void()> task);
 
-    static Movie* from(const std::string& url, std::function<void(AVFrame*)> callback);
+    static Movie* from(const std::string& url, RefPtr<render::VideoSource> source, std::function<void()> callback);
 private:
     Movie(AVFormatContext* format, Stream* audio, Stream* video, Mutex* mutex);
 
