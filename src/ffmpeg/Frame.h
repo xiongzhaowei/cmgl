@@ -13,6 +13,7 @@ public:
     ~Frame();
 
     AVFrame* frame() const;
+    void swap(RefPtr<Frame> frame);
     bool setAudioBuffer(AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples);
     bool setVideoBuffer(AVPixelFormat format, int32_t width, int32_t height);
 

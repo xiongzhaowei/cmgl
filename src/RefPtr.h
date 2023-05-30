@@ -109,6 +109,26 @@ public:
         }
         return value();
     }
+    template <typename S, typename = typename std::enable_if<std::is_base_of<T, S>::value>::type>
+    T* operator =(RefPtr<S>&& other) {
+        if (other.value() != value()) {
+            release();
+            _value = other._value;
+            other._value = nullptr;
+        } else {
+            other.release();
+        }
+        return value();
+    }
+    template <typename S, typename = typename std::enable_if<std::is_base_of<T, S>::value>::type>
+    T* operator =(S* other) {
+        if (other != value()) {
+            release();
+            _value = other;
+            retain();
+        }
+        return value();
+    }
 
     // as 和 cast 都是强制类型转换，区别在于as会根据虚表做动态类型检查
     // 在cast能保证安全性的场合，应尽量使用cast替代as。

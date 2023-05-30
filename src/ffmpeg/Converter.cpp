@@ -40,7 +40,7 @@ RefPtr<Frame> AudioConverter::convert(RefPtr<Frame> frame) {
     return nullptr;
 }
 
-RefPtr<AudioConverter> AudioConverter::create(AVStream* stream, AVSampleFormat format) {
+AudioConverter* AudioConverter::create(AVStream* stream, AVSampleFormat format) {
     if (stream->codecpar->codec_type != AVMEDIA_TYPE_AUDIO) return nullptr;
 
     SwrContext* swrContext = NULL;
@@ -83,7 +83,7 @@ RefPtr<Frame> VideoConverter::convert(RefPtr<Frame> input) {
     return nullptr;
 }
 
-RefPtr<VideoConverter> VideoConverter::create(AVStream* stream, AVPixelFormat format) {
+VideoConverter* VideoConverter::create(AVStream* stream, AVPixelFormat format) {
     if (!stream) return nullptr;
     if (!stream->codecpar) return nullptr;
     if (stream->codecpar->codec_type != AVMEDIA_TYPE_VIDEO) return nullptr;

@@ -21,7 +21,7 @@ public:
 
     RefPtr<Frame> convert(RefPtr<Frame> frame) override;
 
-    static RefPtr<AudioConverter> create(AVStream* stream, AVSampleFormat format);
+    static AudioConverter* create(AVStream* stream, AVSampleFormat format);
 };
 
 class VideoConverter : public Movie::Converter {
@@ -35,7 +35,7 @@ public:
 
     RefPtr<Frame> convert(RefPtr<Frame> input) override;
 
-    static RefPtr<VideoConverter> create(AVStream* stream, AVPixelFormat format);
+    static VideoConverter* create(AVStream* stream, AVPixelFormat format);
 };
 
 OMP_FFMPEG_NAMESPACE_END

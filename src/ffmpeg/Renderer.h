@@ -15,15 +15,11 @@ public:
     void attach(Consumer* consumer) override;
     void sync(double pts) override;
     void play(bool state) override;
-    void push(RefPtr<Frame> frame) override;
-    void clear() override;
-    double duration() const override;
 
-    static RefPtr<VideoRenderer> from(AVStream* stream, RefPtr<render::VideoSource> source, std::function<void()> callback);
+    static RefPtr<VideoRenderer> from(RefPtr<Movie::Stream> stream, RefPtr<render::VideoSource> source, std::function<void()> callback);
 private:
     double _timebase;
-    RefPtr<VideoConverter> _converter;
-    std::list<RefPtr<Frame>> _frameList;
+    RefPtr<Movie::Stream> _stream;
     RefPtr<render::VideoSource> _source;
     std::function<void()> _callback;
 };
@@ -36,25 +32,19 @@ public:
     void attach(Consumer* consumer) override;
     void sync(double pts) override;
     void play(bool state) override;
-    void push(RefPtr<Frame> frame) override;
-    void clear() override;
-    double duration() const override;
 
     static RefPtr<AudioRenderer> from(
+        RefPtr<Movie::Stream> stream,
         SDL_AudioFormat format,
         int sample_rate,
         int channels,
         int frame_size,
-        double timebase,
-        RefPtr<Mutex> mutex,
-        RefPtr<AudioConverter> converter
+        double timebase
     );
-    static RefPtr<AudioRenderer> from(AVStream* stream, RefPtr<Mutex> mutex);
+    static RefPtr<AudioRenderer> from(RefPtr<Movie::Stream> stream, SDL_AudioFormat format);
 private:
     double _timebase;
-    RefPtr<AudioConverter> _converter;
-    std::list<RefPtr<Frame>> _frameList;
-    RefPtr<Mutex> _mutex;
+    RefPtr<Movie::Stream> _stream;
     RefPtr<Consumer> _video;
     SDL_AudioSpec _audioSpec = { 0 };
     SDL_AudioDeviceID _audioDeviceID = 0;

@@ -18,6 +18,12 @@ AVFrame* Frame::frame() const {
     return _frame;
 }
 
+void Frame::swap(RefPtr<Frame> frame) {
+    AVFrame* temp = frame->_frame;
+    frame->_frame = _frame;
+    _frame = temp;
+}
+
 bool Frame::setAudioBuffer(AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples) {
     _frame->format = format;
     _frame->ch_layout = ch_layout;

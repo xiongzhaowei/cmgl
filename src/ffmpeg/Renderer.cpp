@@ -12,7 +12,7 @@ static void SDLCALL __AudioRendererCallback(void* userdata, Uint8* stream, int l
     reinterpret_cast<AudioRenderer*>(userdata)->fill(stream, len);
 }
 
-RefPtr<AudioRenderer> AudioRenderer::from(SDL_AudioFormat format, int sample_rate, int channels, int frame_size, double timebase, RefPtr<Mutex> mutex, RefPtr<AudioConverter> converter) {
+RefPtr<AudioRenderer> AudioRenderer::from(RefPtr<Movie::Stream> stream, SDL_AudioFormat format, int sample_rate, int channels, int frame_size, double timebase) {
     SDL_Init(SDL_INIT_AUDIO);
 
     RefPtr<AudioRenderer> renderer = new AudioRenderer;
@@ -27,84 +27,24 @@ RefPtr<AudioRenderer> AudioRenderer::from(SDL_AudioFormat format, int sample_rat
     spec.userdata = renderer.value();
 
     renderer->_timebase = timebase;
-    renderer->_converter = converter;
-    renderer->_mutex = mutex;
+    renderer->_stream = stream;
     renderer->_audioDeviceID = SDL_OpenAudioDevice(NULL, 0, &spec, &renderer->_audioSpec, 0);
     return (renderer->_audioDeviceID != 0) ? renderer : nullptr;
 }
 
-RefPtr<AudioRenderer> AudioRenderer::from(AVStream* stream, RefPtr<Mutex> mutex) {
+RefPtr<AudioRenderer> AudioRenderer::from(RefPtr<Movie::Stream> stream, SDL_AudioFormat format) {
     if (!stream) return nullptr;
 
-    AVCodecParameters* codecpar = stream->codecpar;
+    AVCodecParameters* codecpar = stream->stream()->codecpar;
     if (!codecpar) return nullptr;
 
-    AVSampleFormat format1;
-    SDL_AudioFormat format2;
-
-    switch (stream->codecpar->format) {
-    case AV_SAMPLE_FMT_U8:
-        format1 = AV_SAMPLE_FMT_U8;
-        format2 = AUDIO_U8;
-        break;
-    case AV_SAMPLE_FMT_S16:
-        format1 = AV_SAMPLE_FMT_S16;
-        format2 = AUDIO_S16;
-        break;
-    case AV_SAMPLE_FMT_S32:
-        format1 = AV_SAMPLE_FMT_S32;
-        format2 = AUDIO_S32;
-        break;
-    case AV_SAMPLE_FMT_FLT:
-        format1 = AV_SAMPLE_FMT_FLT;
-        format2 = AUDIO_F32;
-        break;
-    case AV_SAMPLE_FMT_DBL:
-        format1 = AV_SAMPLE_FMT_FLT;
-        format2 = AUDIO_F32;
-        break;
-    case AV_SAMPLE_FMT_U8P:
-        format1 = AV_SAMPLE_FMT_U8;
-        format2 = AUDIO_U8;
-        break;
-    case AV_SAMPLE_FMT_S16P:
-        format1 = AV_SAMPLE_FMT_S16;
-        format2 = AUDIO_S16;
-        break;
-    case AV_SAMPLE_FMT_S32P:
-        format1 = AV_SAMPLE_FMT_S32;
-        format2 = AUDIO_S32;
-        break;
-    case AV_SAMPLE_FMT_FLTP:
-        format1 = AV_SAMPLE_FMT_FLT;
-        format2 = AUDIO_F32;
-        break;
-    case AV_SAMPLE_FMT_DBLP:
-        format1 = AV_SAMPLE_FMT_FLT;
-        format2 = AUDIO_F32;
-        break;
-    case AV_SAMPLE_FMT_S64:
-    case AV_SAMPLE_FMT_S64P:
-        format1 = AV_SAMPLE_FMT_S32;
-        format2 = AUDIO_S32;
-        break;
-    default:
-        format1 = AV_SAMPLE_FMT_S16;
-        format2 = AUDIO_S16;
-        break;
-    }
-
-    RefPtr<AudioConverter> converter = AudioConverter::create(stream, format1);
-    if (!converter) return nullptr;
-
     return from(
-        format2,
+        stream,
+        format,
         codecpar->sample_rate,
         codecpar->channels,
         codecpar->frame_size,
-        av_q2d(stream->time_base),
-        mutex,
-        converter
+        av_q2d(stream->stream()->time_base)
     );
 }
 
@@ -113,16 +53,7 @@ AudioRenderer::~AudioRenderer() {
 }
 
 void AudioRenderer::fill(uint8_t* stream, int len) {
-    RefPtr<Frame> frame = nullptr;
-    {
-        std::unique_lock<std::mutex> lock = _mutex->lock();
-        if (!_frameList.empty()) {
-            frame = _frameList.front();
-            _frameList.pop_front();
-        }
-    }
-
-    _mutex->notify();
+    RefPtr<Frame> frame = _stream->pop();
 
     if (frame != nullptr) {
         double pts = frame->frame()->best_effort_timestamp * _timebase;
@@ -147,26 +78,6 @@ void AudioRenderer::play(bool state) {
     SDL_PauseAudioDevice(_audioDeviceID, state ? 0 : 1);
 }
 
-void AudioRenderer::push(RefPtr<Frame> frame) {
-    RefPtr<Frame> converted = _converter->convert(frame);
-    if (converted) {
-        std::unique_lock<std::mutex> lock = _mutex->lock();
-        _frameList.push_back(converted);
-    }
-}
-
-void AudioRenderer::clear() {
-    std::list<RefPtr<Frame>> queue;
-    {
-        std::unique_lock<std::mutex> lock = _mutex->lock();
-        queue = std::move(_frameList);
-    }
-}
-
-double AudioRenderer::duration() const {
-    return _frameList.size() * _timebase * _audioSpec.samples;
-}
-
 VideoRenderer::~VideoRenderer() {
 }
 
@@ -175,22 +86,10 @@ void VideoRenderer::attach(Consumer* consumer) {
 }
 
 void VideoRenderer::sync(double pts) {
-    while (!_frameList.empty()) {
-        double display_pts = DBL_MAX;
-        RefPtr<Frame> display_frame = nullptr;
-        for (RefPtr<Frame> frame : _frameList) {
-            double current = frame->frame()->best_effort_timestamp * _timebase;
-            if (display_pts > current) {
-                display_frame = frame;
-                display_pts = current;
-            }
-        }
-        if (display_frame == nullptr) break;
-        if (display_pts > pts) break;
-
-        _frameList.remove(display_frame);
-        _source->update(display_frame->frame());
-        display_frame = nullptr;
+    int64_t timestamp = pts / _timebase;
+    while (RefPtr<Frame> frame = _stream->pop(timestamp)) {
+        _source->update(frame->frame());
+        frame = nullptr;
         _callback();
     }
 }
@@ -199,28 +98,15 @@ void VideoRenderer::play(bool state) {
     // TODO: 视频暂时只能被动等待音频的通知
 }
 
-void VideoRenderer::push(RefPtr<Frame> frame) {
-    RefPtr<Frame> converted = _converter->convert(frame);
-    if (converted) _frameList.push_back(converted);
-}
-
-void VideoRenderer::clear() {
-    std::list<RefPtr<Frame>> queue = std::move(_frameList);
-}
-
-double VideoRenderer::duration() const {
-    return _frameList.size() * _timebase;
-}
-
-RefPtr<VideoRenderer> VideoRenderer::from(AVStream* stream, RefPtr<render::VideoSource> source, std::function<void()> callback) {
+RefPtr<VideoRenderer> VideoRenderer::from(RefPtr<Movie::Stream> stream, RefPtr<render::VideoSource> source, std::function<void()> callback) {
     if (!stream) return nullptr;
 
-    AVCodecParameters* codecpar = stream->codecpar;
+    AVCodecParameters* codecpar = stream->stream()->codecpar;
     if (!codecpar) return nullptr;
 
     RefPtr<VideoRenderer> renderer = new VideoRenderer;
-    renderer->_timebase = av_q2d(stream->time_base);
-    renderer->_converter = VideoConverter::create(stream, AV_PIX_FMT_YUV420P);
+    renderer->_timebase = av_q2d(stream->stream()->time_base);
+    renderer->_stream = stream;
     renderer->_source = source;
     renderer->_callback = callback;
     return renderer;

@@ -39,7 +39,7 @@ int APIENTRY wWinMain(
         w->showWindow(SW_SHOW);
 
         std::wstring url = L"D:\\迅雷下载\\Guardian Of The Galaxy Volume 3 (2023) ENG HDTC 1080p x264 AAC - HushRips.mp4";
-        wheel::RefPtr<wheel::ffmpeg::Movie> movie = wheel::ffmpeg::Movie::from(wcstombs(url, CP_UTF8), source, [w]() {
+        wheel::RefPtr<wheel::ffmpeg::Movie> movie = wheel::ffmpeg::Movie::from(wcstombs(url, CP_UTF8), source, AV_PIX_FMT_YUV420P, [w]() {
             PostMessage(w->handle(), WM_USER, 0, 0); // 通知刷新画面
         });
         movie->start();
