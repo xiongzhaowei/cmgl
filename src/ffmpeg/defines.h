@@ -22,4 +22,5 @@ extern "C" {
 #include <libswscale/swscale.h>
 #include <libswresample/swresample.h>
 }
+#include "Frame.h"
 #include "Movie.h"

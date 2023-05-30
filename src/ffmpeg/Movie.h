@@ -51,7 +51,7 @@ public:
     AVStream* stream() const { return _stream; }
     RefPtr<Consumer> consumer() const { return _consumer; }
     bool decode(AVPacket* packet, AVFrame* frame);
-    void process(AVPacket* packet, AVFrame* frame);
+    void process(AVPacket* packet, RefPtr<Frame> frame);
 
     static Stream* from(AVStream* stream);
     static Stream* from(AVStream* stream, Consumer* consumer);
@@ -61,7 +61,7 @@ struct Movie::Consumer : public Object {
     virtual void attach(Consumer* consumer) = 0;
     virtual void sync(double pts) = 0;
     virtual void play(bool state) = 0;
-    virtual void push(AVFrame* frame) = 0;
+    virtual void push(RefPtr<Frame> frame) = 0;
     virtual void clear() = 0;
     virtual double duration() const = 0;
 };

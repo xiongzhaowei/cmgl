@@ -15,7 +15,7 @@ public:
     void attach(Consumer* consumer) override;
     void sync(double pts) override;
     void play(bool state) override;
-    void push(AVFrame* frame) override;
+    void push(RefPtr<Frame> frame) override;
     void clear() override;
     double duration() const override;
 
@@ -23,7 +23,7 @@ public:
 private:
     double _timebase;
     RefPtr<VideoConverter> _converter;
-    std::list<AVFrame*> _frameList;
+    std::list<RefPtr<Frame>> _frameList;
     RefPtr<render::VideoSource> _source;
     std::function<void()> _callback;
 };
@@ -36,7 +36,7 @@ public:
     void attach(Consumer* consumer) override;
     void sync(double pts) override;
     void play(bool state) override;
-    void push(AVFrame* frame) override;
+    void push(RefPtr<Frame> frame) override;
     void clear() override;
     double duration() const override;
 
@@ -53,7 +53,7 @@ public:
 private:
     double _timebase;
     RefPtr<AudioConverter> _converter;
-    std::list<AVFrame*> _frameList;
+    std::list<RefPtr<Frame>> _frameList;
     RefPtr<Mutex> _mutex;
     RefPtr<Consumer> _video;
     SDL_AudioSpec _audioSpec = { 0 };

@@ -18,26 +18,25 @@ AudioConverter::~AudioConverter() {
     }
 }
 
-AVFrame* AudioConverter::convert(AVFrame* frame) {
-    AVFrame* output = alloc(_format, _ch_layout, frame->nb_samples);
+RefPtr<Frame> AudioConverter::convert(RefPtr<Frame> frame) {
+    RefPtr<Frame> output = Frame::alloc(_format, _ch_layout, frame->frame()->nb_samples);
     if (nullptr == output) return nullptr;
 
     const int bytesPerSample = av_get_bytes_per_sample(_format);
-    int samples_size = frame->nb_samples * frame->channels * bytesPerSample;
+    int samples_size = frame->frame()->nb_samples * frame->frame()->channels * bytesPerSample;
 
-    int nb_samples = swr_convert(_context, output->extended_data, samples_size, (const uint8_t**)frame->extended_data, frame->nb_samples);
+    int nb_samples = swr_convert(_context, output->frame()->extended_data, samples_size, (const uint8_t**)frame->frame()->extended_data, frame->frame()->nb_samples);
     if (nb_samples > 0) {
-        output->best_effort_timestamp = frame->best_effort_timestamp;
-        output->nb_samples = nb_samples;
-        output->sample_rate = _sample_rate;
-        output->pts = frame->pts;
-        output->pkt_dts = frame->pkt_dts;
-        output->pkt_pos = frame->pkt_pos;
-        output->pkt_duration = frame->pkt_duration;
+        output->frame()->best_effort_timestamp = frame->frame()->best_effort_timestamp;
+        output->frame()->nb_samples = nb_samples;
+        output->frame()->sample_rate = _sample_rate;
+        output->frame()->pts = frame->frame()->pts;
+        output->frame()->pkt_dts = frame->frame()->pkt_dts;
+        output->frame()->pkt_pos = frame->frame()->pkt_pos;
+        output->frame()->pkt_duration = frame->frame()->pkt_duration;
         return output;
     }
 
-    av_frame_free(&output);
     return nullptr;
 }
 
@@ -55,27 +54,6 @@ RefPtr<AudioConverter> AudioConverter::create(AVStream* stream, AVSampleFormat f
     return nullptr;
 }
 
-AVFrame* AudioConverter::alloc(AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples) {
-    AVFrame* frame = av_frame_alloc();
-    if (frame == nullptr) return nullptr;
-
-    frame->nb_samples = nb_samples;
-    frame->format = format;
-    frame->ch_layout = ch_layout;
-
-    if (av_frame_get_buffer(frame, 1) < 0) {
-        av_frame_free(&frame);
-        return nullptr;
-    }
-
-    if (av_frame_make_writable(frame) < 0) {
-        av_frame_free(&frame);
-        return nullptr;
-    }
-
-    return frame;
-}
-
 VideoConverter::VideoConverter(SwsContext* context, AVPixelFormat format, int width, int height) : _context(context), _format(format), _width(width), _height(height) {
 
 }
@@ -89,20 +67,19 @@ VideoConverter::~VideoConverter() {
     }
 }
 
-AVFrame* VideoConverter::convert(AVFrame* input) {
-    AVFrame* output = alloc(_format, _width, _height);
+RefPtr<Frame> VideoConverter::convert(RefPtr<Frame> input) {
+    RefPtr<Frame> output = Frame::alloc(_format, _width, _height);
     if (nullptr == output) return nullptr;
-    output->best_effort_timestamp = input->best_effort_timestamp;
-    output->pts = input->pts;
-    output->pkt_dts = input->pkt_dts;
-    output->pkt_pos = input->pkt_pos;
-    output->pkt_duration = input->pkt_pos;
+    output->frame()->best_effort_timestamp = input->frame()->best_effort_timestamp;
+    output->frame()->pts = input->frame()->pts;
+    output->frame()->pkt_dts = input->frame()->pkt_dts;
+    output->frame()->pkt_pos = input->frame()->pkt_pos;
+    output->frame()->pkt_duration = input->frame()->pkt_pos;
 
-    if (sws_scale(_context, (const uint8_t* const*)input->data, input->linesize, 0, _height, output->data, output->linesize) > 0) {
+    if (sws_scale(_context, (const uint8_t* const*)input->frame()->data, input->frame()->linesize, 0, _height, output->frame()->data, output->frame()->linesize) > 0) {
         return output;
     }
 
-    av_frame_free(&output);
     return nullptr;
 }
 
@@ -121,25 +98,4 @@ RefPtr<VideoConverter> VideoConverter::create(AVStream* stream, AVPixelFormat fo
     );
 
     return new VideoConverter(context, format, width, height);
-}
-
-AVFrame* VideoConverter::alloc(AVPixelFormat format, int32_t width, int32_t height) {
-    AVFrame* frame = av_frame_alloc();
-    if (!frame) return nullptr;
-
-    frame->format = format;
-    frame->width = width;
-    frame->height = height;
-
-    if (av_frame_get_buffer(frame, 1) < 0) {
-        av_frame_free(&frame);
-        return nullptr;
-    }
-
-    if (av_frame_make_writable(frame) < 0) {
-        av_frame_free(&frame);
-        return nullptr;
-    }
-
-    return frame;
 }

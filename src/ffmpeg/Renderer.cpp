@@ -113,7 +113,7 @@ AudioRenderer::~AudioRenderer() {
 }
 
 void AudioRenderer::fill(uint8_t* stream, int len) {
-    AVFrame* frame = nullptr;
+    RefPtr<Frame> frame = nullptr;
     {
         std::unique_lock<std::mutex> lock = _mutex->lock();
         if (!_frameList.empty()) {
@@ -125,11 +125,11 @@ void AudioRenderer::fill(uint8_t* stream, int len) {
     _mutex->notify();
 
     if (frame != nullptr) {
-        double pts = frame->best_effort_timestamp * _timebase;
+        double pts = frame->frame()->best_effort_timestamp * _timebase;
 
         SDL_memset(stream, 0, len);
-        SDL_MixAudioFormat(stream, frame->extended_data[0], _audioSpec.format, std::min<uint32_t>(frame->linesize[0], len), SDL_MIX_MAXVOLUME);
-        av_frame_free(&frame);
+        SDL_MixAudioFormat(stream, frame->frame()->extended_data[0], _audioSpec.format, std::min<uint32_t>(frame->frame()->linesize[0], len), SDL_MIX_MAXVOLUME);
+        frame = nullptr;
 
         if (_video) _video->sync(pts);
     }
@@ -147,8 +147,8 @@ void AudioRenderer::play(bool state) {
     SDL_PauseAudioDevice(_audioDeviceID, state ? 0 : 1);
 }
 
-void AudioRenderer::push(AVFrame* frame) {
-    AVFrame* converted = _converter->convert(frame);
+void AudioRenderer::push(RefPtr<Frame> frame) {
+    RefPtr<Frame> converted = _converter->convert(frame);
     if (converted) {
         std::unique_lock<std::mutex> lock = _mutex->lock();
         _frameList.push_back(converted);
@@ -156,13 +156,10 @@ void AudioRenderer::push(AVFrame* frame) {
 }
 
 void AudioRenderer::clear() {
-    std::list<AVFrame*> queue;
+    std::list<RefPtr<Frame>> queue;
     {
         std::unique_lock<std::mutex> lock = _mutex->lock();
         queue = std::move(_frameList);
-    }
-    for (AVFrame* frame : queue) {
-        av_frame_free(&frame);
     }
 }
 
@@ -180,9 +177,9 @@ void VideoRenderer::attach(Consumer* consumer) {
 void VideoRenderer::sync(double pts) {
     while (!_frameList.empty()) {
         double display_pts = DBL_MAX;
-        AVFrame* display_frame = nullptr;
-        for (AVFrame* frame : _frameList) {
-            double current = frame->best_effort_timestamp * _timebase;
+        RefPtr<Frame> display_frame = nullptr;
+        for (RefPtr<Frame> frame : _frameList) {
+            double current = frame->frame()->best_effort_timestamp * _timebase;
             if (display_pts > current) {
                 display_frame = frame;
                 display_pts = current;
@@ -192,8 +189,8 @@ void VideoRenderer::sync(double pts) {
         if (display_pts > pts) break;
 
         _frameList.remove(display_frame);
-        _source->update(display_frame);
-        av_frame_free(&display_frame);
+        _source->update(display_frame->frame());
+        display_frame = nullptr;
         _callback();
     }
 }
@@ -202,16 +199,13 @@ void VideoRenderer::play(bool state) {
     // TODO: 视频暂时只能被动等待音频的通知
 }
 
-void VideoRenderer::push(AVFrame* frame) {
-    AVFrame* converted = _converter->convert(frame);
+void VideoRenderer::push(RefPtr<Frame> frame) {
+    RefPtr<Frame> converted = _converter->convert(frame);
     if (converted) _frameList.push_back(converted);
 }
 
 void VideoRenderer::clear() {
-    std::list<AVFrame*> queue = std::move(_frameList);
-    for (AVFrame* frame : queue) {
-        av_frame_free(&frame);
-    }
+    std::list<RefPtr<Frame>> queue = std::move(_frameList);
 }
 
 double VideoRenderer::duration() const {

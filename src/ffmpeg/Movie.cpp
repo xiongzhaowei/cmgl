@@ -98,7 +98,7 @@ void Movie::run() {
     assert(master != nullptr);
 
     AVPacket* packet = av_packet_alloc();
-    AVFrame* frame = av_frame_alloc();
+    RefPtr<Frame> frame = Frame::alloc();
 
     bool isRunning = true;
     while (isRunning) {
@@ -129,7 +129,6 @@ void Movie::run() {
             return master->consumer()->duration() < kMaxCacheDuration || !_taskQueue.empty();
         });
     }
-    av_frame_free(&frame);
     av_packet_free(&packet);
 }
 
@@ -156,8 +155,8 @@ bool Movie::Stream::decode(AVPacket* packet, AVFrame* frame) {
     return true;
 }
 
-void Movie::Stream::process(AVPacket* packet, AVFrame* frame) {
-    if (decode(packet, frame)) {
+void Movie::Stream::process(AVPacket* packet, RefPtr<Frame> frame) {
+    if (decode(packet, frame->frame())) {
         assert(_consumer != nullptr);
         if (_consumer) _consumer->push(frame);
     }
