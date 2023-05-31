@@ -23,4 +23,5 @@ extern "C" {
 #include <libswresample/swresample.h>
 }
 #include "Frame.h"
+#include "Thread.h"
 #include "Movie.h"

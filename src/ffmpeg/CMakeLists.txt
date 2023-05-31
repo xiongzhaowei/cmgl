@@ -9,4 +9,6 @@
     Converter.h
     Renderer.cpp
     Renderer.h
+    Thread.cpp
+    Thread.h
 )

@@ -18,6 +18,10 @@ AVFrame* Frame::frame() const {
     return _frame;
 }
 
+int64_t Frame::timestamp() const {
+    return _frame->best_effort_timestamp;
+}
+
 void Frame::swap(RefPtr<Frame> frame) {
     AVFrame* temp = frame->_frame;
     frame->_frame = _frame;
@@ -59,4 +63,44 @@ RefPtr<Frame> Frame::alloc(AVSampleFormat format, AVChannelLayout ch_layout, int
 RefPtr<Frame> Frame::alloc(AVPixelFormat format, int32_t width, int32_t height) {
     RefPtr<Frame> frame = new Frame();
     return frame && frame->setVideoBuffer(format, width, height) ? frame : nullptr;
+}
+
+void FrameList::push(RefPtr<Frame> frame) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    auto pred = [](RefPtr<Frame> left, RefPtr<Frame> right) {
+        return left->timestamp() < right->timestamp();
+    };
+    _list.insert(std::lower_bound(_list.begin(), _list.end(), frame, pred), frame);
+}
+
+RefPtr<Frame> FrameList::pop() {
+    std::lock_guard<std::mutex> lock(_mutex);
+    RefPtr<Frame> frame;
+    if (!_list.empty()) {
+        frame = _list.front();
+        _list.pop_front();
+    }
+    return frame;
+}
+
+RefPtr<Frame> FrameList::pop(int64_t timestamp) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    RefPtr<Frame> frame;
+    if (!_list.empty()) {
+        if (_list.front()->timestamp() < timestamp) {
+            frame = _list.front();
+            _list.pop_front();
+        }
+    }
+    return frame;
+}
+
+size_t FrameList::size() {
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _list.size();
+}
+
+void FrameList::clear() {
+    std::lock_guard<std::mutex> lock(_mutex);
+    _list.clear();
 }

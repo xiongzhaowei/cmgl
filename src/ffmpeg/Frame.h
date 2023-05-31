@@ -13,6 +13,7 @@ public:
     ~Frame();
 
     AVFrame* frame() const;
+    int64_t timestamp() const;
     void swap(RefPtr<Frame> frame);
     bool setAudioBuffer(AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples);
     bool setVideoBuffer(AVPixelFormat format, int32_t width, int32_t height);
@@ -20,6 +21,17 @@ public:
     static RefPtr<Frame> alloc();
     static RefPtr<Frame> alloc(AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples);
     static RefPtr<Frame> alloc(AVPixelFormat format, int32_t width, int32_t height);
+};
+
+class FrameList {
+    std::list<RefPtr<Frame>> _list;
+    std::mutex _mutex;
+public:
+    void push(RefPtr<Frame> frame);
+    RefPtr<Frame> pop();
+    RefPtr<Frame> pop(int64_t timestamp);
+    size_t size();
+    void clear();
 };
 
 OMP_FFMPEG_NAMESPACE_END

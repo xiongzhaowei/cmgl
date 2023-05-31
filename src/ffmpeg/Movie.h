@@ -6,63 +6,6 @@
 
 OMP_FFMPEG_NAMESPACE_BEGIN
 
-class WaitableEvent : public Object {
-    std::mutex _mutex;
-    std::condition_variable _notify;
-public:
-    void signal() { _notify.notify_one(); }
-    void wait(std::function<bool()> pred) {
-        std::unique_lock<std::mutex> lock(_mutex);
-        _notify.wait(lock, pred);
-    }
-};
-
-template <typename T>
-class SafeQueue {
-    std::list<T> _list;
-    std::mutex _mutex;
-public:
-    void push(const T& object) {
-        std::lock_guard<std::mutex> lock(_mutex);
-        _list.push_back(object);
-    }
-    T pop() {
-        std::lock_guard<std::mutex> lock(_mutex);
-        T object;
-        if (!_list.empty()) {
-            object = _list.front();
-            _list.pop_front();
-        }
-        return object;
-    }
-    void swap(std::list<T>& list) {
-        std::lock_guard<std::mutex> lock(_mutex);
-        _list.swap(list);
-    }
-    void clear() {
-        std::lock_guard<std::mutex> lock(_mutex);
-        _list.clear();
-    }
-    bool empty() {
-        std::lock_guard<std::mutex> lock(_mutex);
-        return _list.empty();
-    }
-    size_t size() {
-        std::lock_guard<std::mutex> lock(_mutex);
-        return _list.size();
-    }
-    void foreach(std::function<void(T&)> callback) {
-        std::lock_guard<std::mutex> lock(_mutex);
-        for (auto& item : _list) {
-            callback(item);
-        }
-    }
-    void remove(const T& object) {
-        std::lock_guard<std::mutex> lock(_mutex);
-        _list.remove(object);
-    }
-};
-
 class Movie : public Object {
 public:
     struct Converter;
@@ -75,11 +18,12 @@ public:
     void start();
     void run();
     void runOnThread(std::function<void()> task);
+    bool detect();
+    bool decode(AVPacket* packet, RefPtr<Frame> frame);
 
     static Movie* from(const std::string& url, RefPtr<render::VideoSource> source, AVPixelFormat format, std::function<void()> callback);
 private:
     Movie(AVFormatContext* format, Stream* audio, Stream* video, Consumer* audioConsumer, Consumer* videoConsumer, RefPtr<WaitableEvent> event);
-    bool isNeedDecode();
 
     AVFormatContext* _format = nullptr;
     RefPtr<Stream> _audio;
@@ -95,7 +39,7 @@ class Movie::Stream : public Object {
     AVStream* _stream = nullptr;
     AVCodecContext* _context = nullptr;
     RefPtr<Converter> _converter;
-    SafeQueue<RefPtr<Frame>> _frameList;
+    FrameList _frameList;
     RefPtr<WaitableEvent> _event;
     double _timebase;
     Stream(AVStream* stream, AVCodecContext* context);

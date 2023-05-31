@@ -91,16 +91,8 @@ void Movie::run() {
 
     bool isRunning = true;
     while (isRunning) {
-        while (isNeedDecode()) {
-            if (av_read_frame(_format, packet) >= 0) {
-                AVStream* stream = _format->streams[packet->stream_index];
-                if (_audio && _audio->stream() == stream) {
-                    _audio->process(packet, frame);
-                } else if (_video && _video->stream() == stream) {
-                    _video->process(packet, frame);
-                }
-                av_packet_unref(packet);
-            } else {
+        while (detect()) {
+            if (!decode(packet, frame)) {
                 isRunning = false;
             }
         }
@@ -112,16 +104,29 @@ void Movie::run() {
         }
         list.clear();
         _event->wait([this]() -> bool {
-            return isNeedDecode() || !_taskQueue.empty();
+            return detect() || !_taskQueue.empty();
         });
     }
     av_packet_free(&packet);
 }
 
-bool Movie::isNeedDecode() {
+bool Movie::detect() {
     static constexpr double kMaxCacheDuration = 0.1;
 
     return _audio->duration() < kMaxCacheDuration && _video->duration() < kMaxCacheDuration;
+}
+
+bool Movie::decode(AVPacket* packet, RefPtr<Frame> frame) {
+    if (av_read_frame(_format, packet) < 0) return false;
+    
+    AVStream* stream = _format->streams[packet->stream_index];
+    if (_audio && _audio->stream() == stream) {
+        _audio->process(packet, frame);
+    } else if (_video && _video->stream() == stream) {
+        _video->process(packet, frame);
+    }
+    av_packet_unref(packet);
+    return true;
 }
 
 void Movie::runOnThread(std::function<void()> task) {
@@ -170,20 +175,9 @@ RefPtr<Frame> Movie::Stream::pop() {
 }
 
 RefPtr<Frame> Movie::Stream::pop(int64_t pts) {
-    if (_frameList.empty()) return nullptr;
-
-    int64_t target_pts = pts;
-    RefPtr<Frame> target_frame = nullptr;
-    _frameList.foreach([&](RefPtr<Frame>& frame) {
-        double current = frame->frame()->best_effort_timestamp;
-        if (target_pts > current) {
-            target_pts = current;
-            target_frame = frame;
-        }
-    });
-
-    _frameList.remove(target_frame);
-    return target_frame;
+    RefPtr<Frame> frame = _frameList.pop(pts);
+    _event->signal();
+    return frame;
 }
 
 Movie::Stream* Movie::Stream::from(AVStream* stream) {
