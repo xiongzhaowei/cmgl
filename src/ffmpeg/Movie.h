@@ -13,26 +13,22 @@ public:
     class Stream;
 
     ~Movie();
-    void play(bool state);
-    void seek(double time, std::function<void()> callback);
-    void start();
-    void run();
-    void runOnThread(std::function<void()> task);
+
+    RefPtr<Stream> audio();
+    RefPtr<Stream> video();
+
     bool detect();
     bool decode(AVPacket* packet, RefPtr<Frame> frame);
+    void seek(double time, std::function<void()> callback = std::function<void()>());
 
-    static Movie* from(const std::string& url, RefPtr<render::VideoSource> source, AVPixelFormat format, std::function<void()> callback);
+    static Movie* from(const std::string& url, MovieThread* thread, AVPixelFormat pixel, AVSampleFormat sample);
 private:
-    Movie(AVFormatContext* format, Stream* audio, Stream* video, Consumer* audioConsumer, Consumer* videoConsumer, RefPtr<WaitableEvent> event);
+    Movie(AVFormatContext* format, Stream* audio, Stream* video, MovieThread* thread);
 
     AVFormatContext* _format = nullptr;
     RefPtr<Stream> _audio;
     RefPtr<Stream> _video;
-    RefPtr<Consumer> _audioConsumer;
-    RefPtr<Consumer> _videoConsumer;
-    std::unique_ptr<std::thread> _thread;
-    SafeQueue<std::function<void()>> _taskQueue;
-    RefPtr<WaitableEvent> _event;
+    WeakPtr<MovieThread> _thread;
 };
 
 class Movie::Stream : public Object {

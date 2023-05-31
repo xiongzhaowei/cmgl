@@ -8,19 +8,17 @@
 
 OMP_FFMPEG_USING_NAMESPACE
 
-Movie::Movie(AVFormatContext* format, Stream* audio, Stream* video, Consumer* audioConsumer, Consumer* videoConsumer, RefPtr<WaitableEvent> event) : _format(format), _audio(audio), _video(video), _audioConsumer(audioConsumer), _videoConsumer(videoConsumer), _event(event) {
+Movie::Movie(AVFormatContext* format, Stream* audio, Stream* video, MovieThread* thread) : _format(format), _audio(audio), _video(video), _thread(thread) {
 }
 
 Movie::~Movie() {
     if (_format) avformat_close_input(&_format);
 }
 
-Movie* Movie::from(const std::string& url, RefPtr<render::VideoSource> source, AVPixelFormat format, std::function<void()> callback) {
+Movie* Movie::from(const std::string& url, MovieThread* thread, AVPixelFormat pixel, AVSampleFormat sample) {
     AVFormatContext* context = nullptr;
     RefPtr<Stream> audio = nullptr;
     RefPtr<Stream> video = nullptr;
-    RefPtr<Consumer> audioConsumer = nullptr;
-    RefPtr<Consumer> videoConsumer = nullptr;
     RefPtr<WaitableEvent> event = new WaitableEvent;
     if (avformat_open_input(&context, url.c_str(), nullptr, nullptr) >= 0) {
         if (avformat_find_stream_info(context, nullptr) >= 0) {
@@ -28,22 +26,20 @@ Movie* Movie::from(const std::string& url, RefPtr<render::VideoSource> source, A
                 AVStream* stream = context->streams[i];
                 AVMediaType codec_type = stream->codecpar->codec_type;
                 if (codec_type == AVMEDIA_TYPE_AUDIO && nullptr == audio) {
-                    AudioConverter* converter = AudioConverter::create(stream, AV_SAMPLE_FMT_FLT);
+                    AudioConverter* converter = AudioConverter::create(stream, sample);
                     double timebase = av_q2d(stream->time_base) * stream->codecpar->frame_size;
-                    audio = Stream::from(stream, timebase, event, converter);
-                    audioConsumer = AudioRenderer::from(audio, AUDIO_F32);
+                    audio = Stream::from(stream, timebase, thread->_event, converter);
                 } else if (codec_type == AVMEDIA_TYPE_VIDEO && nullptr == video) {
                     VideoConverter* converter = nullptr;
-                    if (stream->codecpar->format != format) {
-                        converter = VideoConverter::create(stream, format);
+                    if (stream->codecpar->format != pixel) {
+                        converter = VideoConverter::create(stream, pixel);
                     }
                     double timebase = av_q2d(stream->time_base);
-                    video = Stream::from(stream, timebase, event, converter);
-                    videoConsumer = VideoRenderer::from(video, source, callback);
+                    video = Stream::from(stream, timebase, thread->_event, converter);
                 }
             }
             if (audio || video) {
-                return new Movie(context, audio, video, audioConsumer, videoConsumer, event);
+                return new Movie(context, audio, video, thread);
             }
         }
         avformat_close_input(&context);
@@ -51,63 +47,33 @@ Movie* Movie::from(const std::string& url, RefPtr<render::VideoSource> source, A
     return nullptr;
 }
 
-void Movie::play(bool state) {
-    runOnThread([this]() {
-        _audioConsumer->play(true);
-        _videoConsumer->play(true);
-    });
+RefPtr<Movie::Stream> Movie::audio() {
+    return _audio;
+}
+
+RefPtr<Movie::Stream> Movie::video() {
+    return _video;
 }
 
 void Movie::seek(double time, std::function<void()> callback) {
-    runOnThread([this, time, callback]() {
+    if (_thread == nullptr) return;
+
+    _thread->runOnThread([this, time, callback]() {
         if (!_format) return;
 
         int64_t ts = std::clamp<int64_t>(time * AV_TIME_BASE, 0, _format->duration);
-
         if (avformat_seek_file(_format, -1, 0, ts, _format->duration, 0) >= 0) {
             _audio->clear();
             _video->clear();
-            runOnThread(callback);
-        }
-    });
-}
-
-void Movie::start() {
-    assert(_thread == nullptr);
-
-    RefPtr<Movie> self = this;
-    _thread = std::make_unique<std::thread>([self]() { self->run(); });
-}
-
-void Movie::run() {
-    if (!_audio && !_video) return;
-
-    if (_audioConsumer && _videoConsumer) {
-        _audioConsumer->attach(_videoConsumer);
-    }
-
-    AVPacket* packet = av_packet_alloc();
-    RefPtr<Frame> frame = Frame::alloc();
-
-    bool isRunning = true;
-    while (isRunning) {
-        while (detect()) {
-            if (!decode(packet, frame)) {
-                isRunning = false;
+            if (callback) {
+                if (_thread != nullptr) {
+                    _thread->runOnThread(callback);
+                } else {
+                    callback();
+                }
             }
         }
-
-        std::list<std::function<void()>> list;
-        _taskQueue.swap(list);
-        for (auto& task : list) {
-            task();
-        }
-        list.clear();
-        _event->wait([this]() -> bool {
-            return detect() || !_taskQueue.empty();
-        });
-    }
-    av_packet_free(&packet);
+    });
 }
 
 bool Movie::detect() {
@@ -127,11 +93,6 @@ bool Movie::decode(AVPacket* packet, RefPtr<Frame> frame) {
     }
     av_packet_unref(packet);
     return true;
-}
-
-void Movie::runOnThread(std::function<void()> task) {
-    _taskQueue.push(task);
-    _event->signal();
 }
 
 Movie::Stream::Stream(AVStream* stream, AVCodecContext* context) : _stream(stream), _context(context) {

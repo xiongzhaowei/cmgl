@@ -25,3 +25,5 @@ extern "C" {
 #include "Frame.h"
 #include "Thread.h"
 #include "Movie.h"
+#include "Converter.h"
+#include "Renderer.h"

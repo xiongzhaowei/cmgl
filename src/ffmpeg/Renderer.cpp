@@ -56,7 +56,7 @@ void AudioRenderer::fill(uint8_t* stream, int len) {
     RefPtr<Frame> frame = _stream->pop();
 
     if (frame != nullptr) {
-        double pts = frame->frame()->best_effort_timestamp * _timebase;
+        double pts = frame->timestamp() * _timebase;
 
         SDL_memset(stream, 0, len);
         SDL_MixAudioFormat(stream, frame->frame()->extended_data[0], _audioSpec.format, std::min<uint32_t>(frame->frame()->linesize[0], len), SDL_MIX_MAXVOLUME);
