@@ -87,9 +87,9 @@ bool Movie::decode(AVPacket* packet, RefPtr<Frame> frame) {
     
     AVStream* stream = _format->streams[packet->stream_index];
     if (_audio && _audio->stream() == stream) {
-        _audio->process(packet, frame);
+        _audio->decode(packet, frame);
     } else if (_video && _video->stream() == stream) {
-        _video->process(packet, frame);
+        _video->decode(packet, frame);
     }
     av_packet_unref(packet);
     return true;
@@ -102,23 +102,23 @@ Movie::Stream::~Stream() {
     if (_context) avcodec_free_context(&_context);
 }
 
-bool Movie::Stream::decode(AVPacket* packet, AVFrame* frame) {
-    if (avcodec_send_packet(_context, packet) < 0) return false;
-    if (avcodec_receive_frame(_context, frame) < 0) return false;
-    return true;
+AVStream* Movie::Stream::stream() const {
+    return _stream;
 }
 
-void Movie::Stream::process(AVPacket* packet, RefPtr<Frame> frame) {
-    if (decode(packet, frame->frame())) {
-        RefPtr<Frame> output;
-        if (_converter) {
-            output = _converter->convert(frame);
-        } else {
-            output = Frame::alloc();
-            output->swap(frame);
-        }
-        _frameList.push(output);
+bool Movie::Stream::decode(AVPacket* packet, RefPtr<Frame> frame) {
+    if (avcodec_send_packet(_context, packet) < 0) return false;
+    if (avcodec_receive_frame(_context, frame->frame()) < 0) return false;
+    
+    RefPtr<Frame> output;
+    if (_converter) {
+        output = _converter->convert(frame);
+    } else {
+        output = Frame::alloc();
+        output->swap(frame);
     }
+    _frameList.push(output);
+    return true;
 }
 
 double Movie::Stream::duration() {

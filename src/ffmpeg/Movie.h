@@ -42,9 +42,8 @@ class Movie::Stream : public Object {
 public:
     ~Stream();
 
-    AVStream* stream() const { return _stream; }
-    bool decode(AVPacket* packet, AVFrame* frame);
-    void process(AVPacket* packet, RefPtr<Frame> frame);
+    AVStream* stream() const;
+    bool decode(AVPacket* packet, RefPtr<Frame> frame);
     double duration();
     void clear();
     RefPtr<Frame> pop();
