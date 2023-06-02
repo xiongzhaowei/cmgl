@@ -5,24 +5,41 @@
 //  Created by 熊朝伟 on 2020/4/2.
 //
 
+#pragma once
+
 OMP_THREAD_NAMESPACE_BEGIN
+
+template <typename T>
+class Future;
 
 class Thread : public Object {
 public:
+    class TaskList;
+
+    Thread();
+
+    virtual void start();
+    virtual void stop();
+    virtual void run();
+
+    virtual void runOnThread(const std::function<void()>& callback);
     
-    void start();
-    void stop();
-    void run();
-    
-    void postTask(const std::function<void()> &closure);
-    void postTaskToFront(const std::function<void()> &closure);
-    void postDelayTask(const std::function<void()> &closure, const std::chrono::milliseconds &duration);
+    template <typename T>
+    RefPtr<Future<T>> future(T value);
 protected:
-    std::atomic<bool> _isRunning;
-    std::mutex _lock;
+    volatile bool _isRunning = false;
     std::unique_ptr<std::thread> _thread;
-    std::queue<std::function<void()>> _taskQueue;
-    std::queue<std::pair<std::function<void()>, std::chrono::milliseconds>> _delayTaskQueue;
+    RefPtr<TaskList> _tasks;
+    RefPtr<WaitableEvent> _event;
+};
+
+class Thread::TaskList : public Object {
+    std::list<std::function<void()>> _list;
+    std::mutex _mutex;
+public:
+    void push(const std::function<void()>& object);
+    void exec();
+    bool empty();
 };
 
 OMP_THREAD_NAMESPACE_END

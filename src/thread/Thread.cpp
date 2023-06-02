@@ -9,31 +9,49 @@
 
 OMP_THREAD_USING_NAMESPACE
 
-static void run_thread(RefPtr<Thread> thread) { thread->run(); }
+Thread::Thread() : _tasks(new TaskList), _event(new WaitableEvent) {
+
+}
 
 void Thread::start() {
-    _thread = std::make_unique<std::thread>(run_thread, this);
+    assert(_thread == nullptr);
+
+    RefPtr<Thread> self = this;
+    _thread = std::make_unique<std::thread>([self]() { self->run(); });
 }
 
 void Thread::stop() {
-    _isRunning = false;
+    runOnThread([this]() { _isRunning = false; });
 }
 
 void Thread::run() {
     _isRunning = true;
     while (_isRunning) {
-        _taskQueue.pop();
+        _event->wait([this]() { return !_tasks->empty(); });
+        _tasks->exec();
     }
 }
 
-void Thread::postTask(const std::function<void()> &closure) {
-    _taskQueue.push(closure);
+void Thread::runOnThread(const std::function<void()>& callback) {
+    _tasks->push(callback);
+    _event->signal();
 }
 
-void Thread::postTaskToFront(const std::function<void()> &closure) {
-    
+void Thread::TaskList::push(const std::function<void()>& object) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    _list.push_back(object);
 }
 
-void Thread::postDelayTask(const std::function<void()> &closure, const std::chrono::milliseconds &duration) {
-    
+void Thread::TaskList::exec() {
+    _mutex.lock();
+    std::list<std::function<void()>> list = std::move(_list);
+    _mutex.unlock();
+    for (auto& task : list) {
+        task();
+    }
+}
+
+bool Thread::TaskList::empty() {
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _list.empty();
 }

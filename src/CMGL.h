@@ -14,6 +14,7 @@
 #include "ffmpeg/defines.h"
 #include "ui/defines.h"
 #include "ui/windows/defines.h"
+#include "thread/defines.h"
 
 #ifdef __cplusplus
 
