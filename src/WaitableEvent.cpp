@@ -4,7 +4,7 @@
 
 #include "defines.h"
 
-OMP_THREAD_USING_NAMESPACE
+OMP_USING_NAMESPACE
 
 void WaitableEvent::signal() { _notify.notify_one(); }
 

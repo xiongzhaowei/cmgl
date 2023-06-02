@@ -7,7 +7,7 @@
 
 #pragma once
 
-OMP_THREAD_NAMESPACE_BEGIN
+OMP_NAMESPACE_BEGIN
 
 template <typename T>
 class Future;
@@ -42,4 +42,4 @@ public:
     bool empty();
 };
 
-OMP_THREAD_NAMESPACE_END
+OMP_NAMESPACE_END

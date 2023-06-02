@@ -7,7 +7,7 @@
 
 #include "defines.h"
 
-OMP_THREAD_USING_NAMESPACE
+OMP_USING_NAMESPACE
 
 Thread::Thread() : _tasks(new TaskList), _event(new WaitableEvent) {
 

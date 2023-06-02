@@ -6,7 +6,7 @@
 
 OMP_FFMPEG_NAMESPACE_BEGIN
 
-class MovieThread : public thread::Thread {
+class MovieThread : public Thread {
     friend class Movie;
 
     std::list<RefPtr<Movie>> _movies;

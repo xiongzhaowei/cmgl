@@ -4,7 +4,7 @@
 
 #pragma once
 
-OMP_THREAD_NAMESPACE_BEGIN
+OMP_NAMESPACE_BEGIN
 
 template <typename T>
 class _AsyncFuture : public Future<T> {
@@ -87,4 +87,4 @@ RefPtr<Future<T>> Future<T>::value(Thread* thread, T value) {
 template <typename T>
 RefPtr<Future<T>> Thread::future(T value) { return Future<T>::value(this, value); }
 
-OMP_THREAD_NAMESPACE_END
+OMP_NAMESPACE_END

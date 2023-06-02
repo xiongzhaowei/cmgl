@@ -4,7 +4,7 @@
 
 #pragma once
 
-OMP_THREAD_NAMESPACE_BEGIN
+OMP_NAMESPACE_BEGIN
 
 template <typename T>
 class Future : public Object {
@@ -32,7 +32,7 @@ public:
     virtual void complete(T value) = 0;
 };
 
-OMP_THREAD_NAMESPACE_END
+OMP_NAMESPACE_END
 
 #include "Thread.h"
 #include "Future.inl"

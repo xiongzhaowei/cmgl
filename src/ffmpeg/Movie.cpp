@@ -19,7 +19,7 @@ Movie* Movie::from(const std::string& url, MovieThread* thread, AVPixelFormat pi
     AVFormatContext* context = nullptr;
     RefPtr<Stream> audio = nullptr;
     RefPtr<Stream> video = nullptr;
-    RefPtr<thread::WaitableEvent> event = new thread::WaitableEvent;
+    RefPtr<WaitableEvent> event = new WaitableEvent;
     if (avformat_open_input(&context, url.c_str(), nullptr, nullptr) >= 0) {
         if (avformat_find_stream_info(context, nullptr) >= 0) {
             for (uint32_t i = 0; i < context->nb_streams; i++) {
@@ -152,7 +152,7 @@ Movie::Stream* Movie::Stream::from(AVStream* stream) {
     return new Stream(stream, context);
 }
 
-Movie::Stream* Movie::Stream::from(AVStream* stream, double timebase, RefPtr<thread::WaitableEvent> event, Movie::Converter* converter) {
+Movie::Stream* Movie::Stream::from(AVStream* stream, double timebase, RefPtr<WaitableEvent> event, Movie::Converter* converter) {
     Stream* result = from(stream);
     if (result) {
         result->_timebase = timebase;

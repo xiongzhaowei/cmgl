@@ -48,4 +48,7 @@
 #include "Object.h"
 #include "RefPtr.h"
 #include "WeakPtr.h"
+#include "WaitableEvent.h"
+#include "Thread.h"
+#include "Future.h"
 #endif

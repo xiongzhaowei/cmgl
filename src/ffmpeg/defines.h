@@ -9,7 +9,6 @@
 
 #include "../defines.h"
 #include "../render/defines.h"
-#include "../thread/defines.h"
 
 #define OMP_FFMPEG_NAMESPACE_BEGIN    OMP_NAMESPACE_BEGIN namespace ffmpeg {
 #define OMP_FFMPEG_NAMESPACE_END      } OMP_NAMESPACE_END
@@ -24,6 +23,7 @@ extern "C" {
 #include <libswresample/swresample.h>
 }
 #include "Frame.h"
+#include "Stream.h"
 #include "Thread.h"
 #include "Movie.h"
 #include "Converter.h"

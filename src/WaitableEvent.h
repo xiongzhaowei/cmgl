@@ -4,7 +4,7 @@
 
 #pragma once
 
-OMP_THREAD_NAMESPACE_BEGIN
+OMP_NAMESPACE_BEGIN
 
 class WaitableEvent : public Object {
     std::mutex _mutex;
@@ -14,4 +14,4 @@ public:
     void wait(const std::function<bool()>& pred);
 };
 
-OMP_THREAD_NAMESPACE_END
+OMP_NAMESPACE_END

@@ -36,7 +36,7 @@ class Movie::Stream : public Object {
     AVCodecContext* _context = nullptr;
     RefPtr<Converter> _converter;
     FrameList _frameList;
-    RefPtr<thread::WaitableEvent> _event;
+    RefPtr<WaitableEvent> _event;
     double _timebase;
     Stream(AVStream* stream, AVCodecContext* context);
 public:
@@ -50,7 +50,7 @@ public:
     RefPtr<Frame> pop(int64_t pts);
 
     static Stream* from(AVStream* stream);
-    static Stream* from(AVStream* stream, double timebase, RefPtr<thread::WaitableEvent> event, Converter* converter);
+    static Stream* from(AVStream* stream, double timebase, RefPtr<WaitableEvent> event, Converter* converter);
 };
 
 struct Movie::Consumer : public Object {
