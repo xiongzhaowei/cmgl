@@ -78,13 +78,19 @@ RefPtr<Future<R>> Future<T>::then(const std::function<RefPtr<Future<R>>(T)>& onV
 }
 
 template <typename T>
-RefPtr<Future<T>> Future<T>::value(Thread* thread, T value) {
+RefPtr<Future<T>> Future<T>::value(T value, Thread* thread) {
+    if (thread == nullptr) thread = Thread::current();
+    if (thread == nullptr) thread = Thread::events();
     RefPtr<_AsyncFuture<T>> future = new _AsyncFuture<T>(thread);
     future->_whenCompleted(value);
     return future;
 }
 
 template <typename T>
-RefPtr<Future<T>> Thread::future(T value) { return Future<T>::value(this, value); }
+RefPtr<Completer<T>> Completer<T>::async(Thread* thread) {
+    if (thread == nullptr) thread = Thread::current();
+    if (thread == nullptr) thread = Thread::events();
+    return new _AsyncCompleter<T>(thread);
+}
 
 OMP_NAMESPACE_END

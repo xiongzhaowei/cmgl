@@ -19,7 +19,7 @@ public:
     template <typename R>
     RefPtr<Future<R>> then(const std::function<RefPtr<Future<R>>(T)>& onValue);
 
-    static RefPtr<Future<T>> value(Thread* thread, T value);
+    static RefPtr<Future<T>> value(T value, Thread* thread = nullptr);
 protected:
     RefPtr<Thread> _thread;
 };
@@ -30,9 +30,10 @@ public:
     virtual RefPtr<Future<T>> future() const = 0;
     virtual bool isCompleted() const = 0;
     virtual void complete(T value) = 0;
+
+    static RefPtr<Completer<T>> async(Thread* thread = nullptr);
 };
 
 OMP_NAMESPACE_END
 
-#include "Thread.h"
 #include "Future.inl"

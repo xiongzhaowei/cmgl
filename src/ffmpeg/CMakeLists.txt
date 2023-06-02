@@ -3,8 +3,8 @@
     defines.h
     Frame.cpp
     Frame.h
-    Stream.cpp
     Stream.h
+    Stream.inl
     Movie.cpp
     Movie.h
     Converter.cpp

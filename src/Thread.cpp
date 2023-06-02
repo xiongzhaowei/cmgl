@@ -9,15 +9,37 @@
 
 OMP_USING_NAMESPACE
 
+static thread_local Thread* __thread;
+
 Thread::Thread() : _tasks(new TaskList), _event(new WaitableEvent) {
 
+}
+
+Thread* Thread::current() {
+    return __thread;
+}
+
+Thread* Thread::future() {
+    static RefPtr<Thread> thread;
+    static std::mutex mutex;
+    mutex.lock();
+    if (thread == nullptr) {
+        thread = new Thread;
+        thread->start();
+    }
+    mutex.unlock();
+    return thread;
 }
 
 void Thread::start() {
     assert(_thread == nullptr);
 
     RefPtr<Thread> self = this;
-    _thread = std::make_unique<std::thread>([self]() { self->run(); });
+    _thread = std::make_unique<std::thread>([self]() {
+        __thread = self;
+        self->run();
+        __thread = nullptr;
+    });
 }
 
 void Thread::stop() {

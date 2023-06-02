@@ -9,9 +9,6 @@
 
 OMP_NAMESPACE_BEGIN
 
-template <typename T>
-class Future;
-
 class Thread : public Object {
 public:
     class TaskList;
@@ -23,9 +20,11 @@ public:
     virtual void run();
 
     virtual void runOnThread(const std::function<void()>& callback);
-    
-    template <typename T>
-    RefPtr<Future<T>> future(T value);
+
+    static Thread* current();
+
+    // 当从非Thread创建的线程中使用future对象时，使用此线程作为默认线程；
+    static Thread* future();
 protected:
     volatile bool _isRunning = false;
     std::unique_ptr<std::thread> _thread;

@@ -13,6 +13,12 @@ target_sources(${PROJECT_NAME} PRIVATE
     omplayer.h
     RefPtr.h
     WeakPtr.h
+    Future.h
+    Future.inl
+    Thread.cpp
+    Thread.h
+    WaitableEvent.cpp
+    WaitableEvent.h
 )
 
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
