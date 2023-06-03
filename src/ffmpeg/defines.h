@@ -9,6 +9,7 @@
 
 #include "../defines.h"
 #include "../render/defines.h"
+#include "../thread/defines.h"
 
 #define OMP_FFMPEG_NAMESPACE_BEGIN    OMP_NAMESPACE_BEGIN namespace ffmpeg {
 #define OMP_FFMPEG_NAMESPACE_END      } OMP_NAMESPACE_END
