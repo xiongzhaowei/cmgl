@@ -25,6 +25,7 @@ public:
 template <typename T>
 class _Stream : public Stream<T> {
     volatile bool _isPaused = false;
+    volatile bool _isClosed = false;
     RefPtr<Thread> _thread;
     std::list<RefPtr<_StreamSubscription<T>>> _subscriptions;
 public:
@@ -32,6 +33,7 @@ public:
 
     RefPtr<StreamSubscription<T>> listen(RefPtr<Consumer<T>> consumer) override;
     bool isPaused() const;
+    bool isClosed() const;
 
     void _cancel(RefPtr<_StreamSubscription<T>> subscription);
     void _pause(bool state);
@@ -74,6 +76,8 @@ class _StreamController : public StreamController<typename std::enable_if<std::i
     RefPtr<_Stream<T>> _stream;
 public:
     _StreamController(Thread* thread);
+    bool isPaused() const override;
+    bool isClosed() const override;
 
     RefPtr<Stream<T>> stream() const override;
     void add(RefPtr<T> object) override;
@@ -84,6 +88,16 @@ public:
 template <typename T>
 _StreamController<T>::_StreamController(Thread* thread) : _stream(new _Stream<T>(thread)) {
 
+}
+
+template <typename T>
+bool _StreamController<T>::isPaused() const {
+    return _stream->isPaused();
+}
+
+template <typename T>
+bool _StreamController<T>::isClosed() const {
+    return _stream->isClosed();
 }
 
 template <typename T>
@@ -113,16 +127,26 @@ _Stream<T>::_Stream(Thread* thread) : _thread(thread) {
 
 template <typename T>
 RefPtr<StreamSubscription<T>> _Stream<T>::listen(RefPtr<Consumer<T>> consumer) {
-    RefPtr<_StreamSubscription<T>> subscription = new _StreamSubscription<T>;
-    subscription->_stream = this;
-    subscription->_consumer = consumer;
-    _subscriptions.push_back(subscription);
-    return subscription;
+    if (!isClosed()) {
+        RefPtr<_StreamSubscription<T>> subscription = new _StreamSubscription<T>;
+        subscription->_stream = this;
+        subscription->_consumer = consumer;
+        _subscriptions.push_back(subscription);
+        return subscription;
+    } else {
+        consumer->close();
+        return nullptr;
+    }
 }
 
 template <typename T>
 bool _Stream<T>::isPaused() const {
     return _isPaused;
+}
+
+template <typename T>
+bool _Stream<T>::isClosed() const {
+    return _isClosed;
 }
 
 template <typename T>
@@ -172,6 +196,7 @@ void _Stream<T>::_close() {
         for (RefPtr<_StreamSubscription<T>> subscription : subscriptions) {
             subscription->cancel();
         }
+        self->_isClosed = true;
     });
 }
 

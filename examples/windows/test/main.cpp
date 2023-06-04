@@ -47,6 +47,7 @@ int APIENTRY wWinMain(
             assert(consumer->closed == false);
             thread->runOnThread([=]() {
                 assert(consumer->closed == true);
+                assert(streamController->isClosed());
                 thread->stop();
             });
         });

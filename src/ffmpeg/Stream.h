@@ -42,6 +42,9 @@ public:
 template <typename T>
 class StreamController : public Consumer<T> {
 public:
+    virtual bool isPaused() const = 0;
+    virtual bool isClosed() const = 0;
+
     virtual RefPtr<Stream<T>> stream() const = 0;
     static RefPtr<StreamController<T>> from(Thread* thread);
 };

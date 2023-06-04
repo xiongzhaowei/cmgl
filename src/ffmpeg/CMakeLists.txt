@@ -5,6 +5,8 @@
     Frame.h
     Stream.h
     Stream.inl
+    Decoder.cpp
+    Decoder.h
     Movie.cpp
     Movie.h
     Converter.cpp
