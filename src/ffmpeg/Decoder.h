@@ -7,6 +7,7 @@
 OMP_FFMPEG_NAMESPACE_BEGIN
 
 class DecoderStream : public Object {
+    friend class Decoder;
     AVStream* _stream;
     AVCodecContext* _context;
     RefPtr<StreamController<Frame>> _controller;
@@ -17,6 +18,7 @@ public:
     ~DecoderStream();
 
     RefPtr<Stream<Frame>> stream() const;
+    AVCodecParameters* codecpar() const;
     bool available() const;
     bool match(AVFormatContext* format, AVPacket* packet) const;
     bool decode(AVPacket* packet, RefPtr<Frame> frame);
@@ -33,6 +35,9 @@ public:
 
     RefPtr<Stream<Frame>> audio();
     RefPtr<Stream<Frame>> video();
+
+    AVStream* audioStream();
+    AVStream* videoStream();
 
     bool available() const;
     bool decode(AVPacket* packet, RefPtr<Frame> frame);

@@ -45,6 +45,14 @@ RefPtr<Stream<Frame>> Decoder::video() {
     return _video->stream();
 }
 
+AVStream* Decoder::audioStream() {
+    return _audio->_stream;
+}
+
+AVStream* Decoder::videoStream() {
+    return _video->_stream;
+}
+
 void Decoder::seek(double time, std::function<void()> callback) {
     if (_thread == nullptr) return;
 
@@ -103,6 +111,10 @@ DecoderStream::~DecoderStream() {
 
 RefPtr<Stream<Frame>> DecoderStream::stream() const {
     return _controller->stream();
+}
+
+AVCodecParameters* DecoderStream::codecpar() const {
+    return _stream->codecpar;
 }
 
 bool DecoderStream::available() const {
