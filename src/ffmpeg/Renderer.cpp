@@ -152,7 +152,7 @@ void AudioRenderer1::add(RefPtr<Frame> frame) {
         audio = Frame::alloc();
         audio->swap(frame);
     }
-    _frameList.push(frame);
+    _frameList.push(audio);
     if (_frameList.size() >= 5) {
         _subscription->pause();
     }
@@ -216,14 +216,14 @@ VideoRenderer1::~VideoRenderer1() {
 }
 
 void VideoRenderer1::add(RefPtr<Frame> frame) {
-    RefPtr<Frame> audio;
+    RefPtr<Frame> video;
     if (_converter) {
-        audio = _converter->convert(frame);
+        video = _converter->convert(frame);
     } else {
-        audio = Frame::alloc();
-        audio->swap(frame);
+        video = Frame::alloc();
+        video->swap(frame);
     }
-    _frameList.push(frame);
+    _frameList.push(video);
     if (_frameList.size() >= 5) {
         _subscription->pause();
     }
@@ -245,5 +245,8 @@ void VideoRenderer1::sync(double pts) {
         _source->update(frame->frame());
         frame = nullptr;
         _callback();
+    }
+    if (_frameList.size() < 5) {
+        _subscription->resume();
     }
 }
