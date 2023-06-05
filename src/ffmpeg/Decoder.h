@@ -6,7 +6,7 @@
 
 OMP_FFMPEG_NAMESPACE_BEGIN
 
-class DecoderStream : public Object {
+class DecoderStream : public Stream<Frame> {
     friend class Decoder;
     AVStream* _stream;
     AVCodecContext* _context;
@@ -16,9 +16,10 @@ public:
 
     DecoderStream(AVStream* stream, AVCodecContext* context, Thread* thread);
     ~DecoderStream();
+    
+    RefPtr<StreamSubscription<Frame>> listen(RefPtr<Consumer<Frame>> consumer) override;
 
-    RefPtr<Stream<Frame>> stream() const;
-    AVCodecParameters* codecpar() const;
+    AVStream* stream() const;
     bool available() const;
     bool match(AVFormatContext* format, AVPacket* packet) const;
     bool decode(AVPacket* packet, RefPtr<Frame> frame);
@@ -33,17 +34,14 @@ class Decoder : public Object {
 public:
     ~Decoder();
 
-    RefPtr<Stream<Frame>> audio();
-    RefPtr<Stream<Frame>> video();
-
-    AVStream* audioStream();
-    AVStream* videoStream();
+    RefPtr<DecoderStream> audio();
+    RefPtr<DecoderStream> video();
 
     bool available() const;
     bool decode(AVPacket* packet, RefPtr<Frame> frame);
     void seek(double time, std::function<void()> callback = std::function<void()>());
 
-    static Decoder* from(const std::string& url, Thread* thread, AVPixelFormat pixel, AVSampleFormat sample);
+    static Decoder* from(const std::string& url, Thread* thread);
 };
 
 OMP_FFMPEG_NAMESPACE_END

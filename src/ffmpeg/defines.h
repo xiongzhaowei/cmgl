@@ -26,6 +26,5 @@ extern "C" {
 #include "Stream.h"
 #include "Decoder.h"
 #include "Thread.h"
-#include "Movie.h"
 #include "Converter.h"
 #include "Renderer.h"

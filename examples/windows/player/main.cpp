@@ -27,10 +27,10 @@ int APIENTRY wWinMain(
 ) {
     std::wstring url = L"D:\\迅雷下载\\Guardian Of The Galaxy Volume 3 (2023) ENG HDTC 1080p x264 AAC - HushRips.mp4";
     wheel::RefPtr<wheel::ffmpeg::DecodeThread> thread = new wheel::ffmpeg::DecodeThread;
-    wheel::RefPtr<wheel::ffmpeg::Decoder> movie = thread->decode(wcstombs(url, CP_UTF8), AV_PIX_FMT_YUV420P, AV_SAMPLE_FMT_FLT);
+    wheel::RefPtr<wheel::ffmpeg::Decoder> movie = thread->decode(wcstombs(url, CP_UTF8));
 
-    wheel::RefPtr<wheel::ffmpeg::AudioRenderer1> audio;
-    wheel::RefPtr<wheel::ffmpeg::VideoRenderer1> video;
+    wheel::RefPtr<wheel::ffmpeg::AudioRenderer> audio;
+    wheel::RefPtr<wheel::ffmpeg::VideoRenderer> video;
 
     wheel::RefPtr<wheel::ui::windows::PlatformWindow> w = new wheel::ui::windows::PlatformWindow(wheel::ui::windows::PlatformWindow::Style::create(TEXT("Player"), TEXT(""), true, true, true, true, false, false));
     if (w->create(1024, 768, nullptr, true)) {
@@ -45,8 +45,8 @@ int APIENTRY wWinMain(
         w->addSubview(caption);
         w->showWindow(SW_SHOW);
 
-        audio = wheel::ffmpeg::AudioRenderer1::from(movie->audio(), AUDIO_F32, movie->audioStream()->codecpar, av_q2d(movie->audioStream()->time_base));
-        video = wheel::ffmpeg::VideoRenderer1::from(movie->video(), source, movie->videoStream()->codecpar, av_q2d(movie->videoStream()->time_base), [w]() {
+        audio = wheel::ffmpeg::AudioRenderer::from(movie->audio(), AUDIO_F32, movie->audio()->stream()->codecpar, av_q2d(movie->audio()->stream()->time_base));
+        video = wheel::ffmpeg::VideoRenderer::from(movie->video(), source, movie->video()->stream()->codecpar, av_q2d(movie->video()->stream()->time_base), [w]() {
             PostMessage(w->handle(), WM_USER, 0, 0); // 通知刷新画面
         });
         audio->attach(video);

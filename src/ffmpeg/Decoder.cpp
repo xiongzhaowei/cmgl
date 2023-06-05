@@ -13,7 +13,7 @@ Decoder::~Decoder() {
     if (_format) avformat_close_input(&_format);
 }
 
-Decoder* Decoder::from(const std::string& url, Thread* thread, AVPixelFormat pixel, AVSampleFormat sample) {
+Decoder* Decoder::from(const std::string& url, Thread* thread) {
     AVFormatContext* context = nullptr;
     RefPtr<DecoderStream> audio = nullptr;
     RefPtr<DecoderStream> video = nullptr;
@@ -37,20 +37,12 @@ Decoder* Decoder::from(const std::string& url, Thread* thread, AVPixelFormat pix
     return nullptr;
 }
 
-RefPtr<Stream<Frame>> Decoder::audio() {
-    return _audio->stream();
+RefPtr<DecoderStream> Decoder::audio() {
+    return _audio;
 }
 
-RefPtr<Stream<Frame>> Decoder::video() {
-    return _video->stream();
-}
-
-AVStream* Decoder::audioStream() {
-    return _audio->_stream;
-}
-
-AVStream* Decoder::videoStream() {
-    return _video->_stream;
+RefPtr<DecoderStream> Decoder::video() {
+    return _video;
 }
 
 void Decoder::seek(double time, std::function<void()> callback) {
@@ -61,8 +53,6 @@ void Decoder::seek(double time, std::function<void()> callback) {
 
         int64_t ts = std::clamp<int64_t>(time * AV_TIME_BASE, 0, _format->duration);
         if (avformat_seek_file(_format, -1, 0, ts, _format->duration, 0) >= 0) {
-            //_audio->clear();
-            //_video->clear();
             if (callback) {
                 if (_thread != nullptr) {
                     _thread->runOnThread(callback);
@@ -109,12 +99,12 @@ DecoderStream::~DecoderStream() {
     if (_context) avcodec_free_context(&_context);
 }
 
-RefPtr<Stream<Frame>> DecoderStream::stream() const {
-    return _controller->stream();
+RefPtr<StreamSubscription<Frame>> DecoderStream::listen(RefPtr<Consumer<Frame>> consumer) {
+    return _controller->stream()->listen(consumer);
 }
 
-AVCodecParameters* DecoderStream::codecpar() const {
-    return _stream->codecpar;
+AVStream* DecoderStream::stream() const {
+    return _stream;
 }
 
 bool DecoderStream::available() const {

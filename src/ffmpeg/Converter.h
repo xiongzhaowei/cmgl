@@ -6,11 +6,11 @@
 
 OMP_FFMPEG_NAMESPACE_BEGIN
 
-struct Movie::Converter : public Object {
+struct Converter : public Object {
     virtual RefPtr<Frame> convert(RefPtr<Frame> frame) = 0;
 };
 
-class AudioConverter : public Movie::Converter {
+class AudioConverter : public Converter {
     int32_t _sample_rate;
     AVChannelLayout _ch_layout;
     AVSampleFormat _format;
@@ -24,7 +24,7 @@ public:
     static AudioConverter* create(AVStream* stream, AVSampleFormat format);
 };
 
-class VideoConverter : public Movie::Converter {
+class VideoConverter : public Converter {
     int32_t _width;
     int32_t _height;
     AVPixelFormat _format;
