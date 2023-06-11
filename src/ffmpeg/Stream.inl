@@ -7,202 +7,137 @@
 OMP_FFMPEG_NAMESPACE_BEGIN
 
 template <typename T>
-class _Stream;
+class _SyncStreamController;
 
 template <typename T>
-class _StreamSubscription : public StreamSubscription<typename std::enable_if<std::is_base_of<RefCounted, T>::value, T>::type> {
-    friend class _Stream<T>;
-    WeakPtr<_Stream<T>> _stream;
-    RefPtr<Consumer<T>> _consumer;
+class _StreamSubscription : public StreamSubscription<T> {
 public:
+    WeakPtr<_SyncStreamController<T>> _controller;
+    RefPtr<Consumer<T>> _consumer;
+
     void cancel() override;
     void pause() override;
     void resume() override;
-    void _add(RefPtr<T> object);
-    void _error();
+};
+
+template <typename T>
+class _SyncStreamController : public StreamController<T> {
+    volatile bool _isPaused = false;
+    volatile bool _isClosed = false;
+    std::mutex _mutex;
+    std::list<RefPtr<_StreamSubscription<T>>> _subscriptions;
+    RefPtr<Thread> _thread;
+    RefPtr<Stream<T>> _stream;
+public:
+    _SyncStreamController(Thread* thread) : _thread(thread), _stream(new _Stream<T>(this)) { assert(thread != nullptr); }
+
+    void add(Element object) override {
+        _mutex.lock();
+        std::list<RefPtr<_StreamSubscription<T>>> subscriptions = _subscriptions;
+        _mutex.unlock();
+        for (RefPtr<_StreamSubscription<T>> subscription : subscriptions) {
+            RefPtr<Consumer<T>> consumer = subscription->_consumer;
+            if (consumer) consumer->add(object);
+        }
+    }
+
+    void addError() override {
+        _mutex.lock();
+        std::list<RefPtr<_StreamSubscription<T>>> subscriptions = _subscriptions;
+        _mutex.unlock();
+        for (RefPtr<_StreamSubscription<T>> subscription : subscriptions) {
+            RefPtr<Consumer<T>> consumer = subscription->_consumer;
+            if (consumer) consumer->addError();
+        }
+    }
+
+    void close() override {
+        _mutex.lock();
+        std::list<RefPtr<_StreamSubscription<T>>> subscriptions = _subscriptions;
+        _mutex.unlock();
+        for (RefPtr<_StreamSubscription<T>> subscription : subscriptions) {
+            RefPtr<Consumer<T>> consumer = subscription->_consumer;
+            if (consumer) consumer->close();
+        }
+        _mutex.lock();
+        _isClosed = true;
+        _mutex.unlock();
+    }
+
+    bool isPaused() const override { return _isPaused; }
+    bool isClosed() const override { return _isClosed; }
+
+    RefPtr<Stream<T>> stream() const {
+        return _stream;
+    }
+
+    RefPtr<StreamSubscription<T>> _listen(RefPtr<Consumer<T>> consumer) {
+        if (isClosed()) {
+            consumer->close();
+            return nullptr;
+        }
+        RefPtr<_StreamSubscription<T>> subscription = new _StreamSubscription<T>;
+        subscription->_controller = this;
+        subscription->_consumer = consumer;
+        _mutex.lock();
+        _subscriptions.push_back(subscription);
+        _mutex.unlock();
+        return subscription;
+    }
+
+    void _onCancel(_StreamSubscription<T>* subscription) {
+        _mutex.lock();
+        subscription->_consumer = nullptr;
+        subscription->_controller = nullptr;
+        _subscriptions.remove(subscription);
+        _mutex.unlock();
+    }
+
+    void _onPause(_StreamSubscription<T>* subscription) {
+        _mutex.lock();
+        _isPaused = true;
+        _mutex.unlock();
+        _thread->runOnThread([]() {});
+    }
+
+    void _onResume(_StreamSubscription<T>* subscription) {
+        _mutex.lock();
+        _isPaused = false;
+        _mutex.unlock();
+        _thread->runOnThread([]() {});
+    }
+
 };
 
 template <typename T>
 class _Stream : public Stream<T> {
-    volatile bool _isPaused = false;
-    volatile bool _isClosed = false;
-    RefPtr<Thread> _thread;
-    std::list<RefPtr<_StreamSubscription<T>>> _subscriptions;
+    WeakPtr<_SyncStreamController<T>> _controller;
 public:
-    _Stream(Thread* thread);
-
-    RefPtr<StreamSubscription<T>> listen(RefPtr<Consumer<T>> consumer) override;
-    bool isPaused() const;
-    bool isClosed() const;
-
-    void _cancel(RefPtr<_StreamSubscription<T>> subscription);
-    void _pause(bool state);
-    void _add(RefPtr<T> object);
-    void _error();
-    void _close();
+    _Stream(_SyncStreamController<T>* controller) : _controller(controller) {}
+    RefPtr<StreamSubscription<T>> listen(RefPtr<Consumer<T>> consumer) {
+        return _controller->_listen(consumer);
+    }
 };
 
 template <typename T>
 void _StreamSubscription<T>::cancel() {
-    RefPtr<_StreamSubscription<T>> self = this;
-    _stream->_cancel(this);
-    _stream = nullptr;
-    _consumer->close();
-    _consumer = nullptr;
+    _controller->_onCancel(this);
 }
 
 template <typename T>
 void _StreamSubscription<T>::pause() {
-    _stream->_pause(true);
+    _controller->_onPause(this);
 }
 
 template <typename T>
 void _StreamSubscription<T>::resume() {
-    _stream->_pause(false);
+    _controller->_onResume(this);
 }
 
 template <typename T>
-void _StreamSubscription<T>::_add(RefPtr<T> object) {
-    _consumer->add(object);
-}
-
-template <typename T>
-void _StreamSubscription<T>::_error() {
-    _consumer->addError();
-}
-
-template <typename T>
-class _StreamController : public StreamController<typename std::enable_if<std::is_base_of<RefCounted, T>::value, T>::type> {
-    RefPtr<_Stream<T>> _stream;
-public:
-    _StreamController(Thread* thread);
-    bool isPaused() const override;
-    bool isClosed() const override;
-
-    RefPtr<Stream<T>> stream() const override;
-    void add(RefPtr<T> object) override;
-    void addError() override;
-    void close() override;
-};
-
-template <typename T>
-_StreamController<T>::_StreamController(Thread* thread) : _stream(new _Stream<T>(thread)) {
-
-}
-
-template <typename T>
-bool _StreamController<T>::isPaused() const {
-    return _stream->isPaused();
-}
-
-template <typename T>
-bool _StreamController<T>::isClosed() const {
-    return _stream->isClosed();
-}
-
-template <typename T>
-RefPtr<Stream<T>> _StreamController<T>::stream() const {
-    return _stream;
-}
-
-template <typename T>
-void _StreamController<T>::add(RefPtr<T> object) {
-    _stream->_add(object);
-}
-
-template <typename T>
-void _StreamController<T>::addError() {
-    _stream->_error();
-}
-
-template <typename T>
-void _StreamController<T>::close() {
-    _stream->_close();
-}
-
-template <typename T>
-_Stream<T>::_Stream(Thread* thread) : _thread(thread) {
-
-}
-
-template <typename T>
-RefPtr<StreamSubscription<T>> _Stream<T>::listen(RefPtr<Consumer<T>> consumer) {
-    if (!isClosed()) {
-        RefPtr<_StreamSubscription<T>> subscription = new _StreamSubscription<T>;
-        subscription->_stream = this;
-        subscription->_consumer = consumer;
-        _subscriptions.push_back(subscription);
-        return subscription;
-    } else {
-        consumer->close();
-        return nullptr;
-    }
-}
-
-template <typename T>
-bool _Stream<T>::isPaused() const {
-    return _isPaused;
-}
-
-template <typename T>
-bool _Stream<T>::isClosed() const {
-    return _isClosed;
-}
-
-template <typename T>
-void _Stream<T>::_cancel(RefPtr<_StreamSubscription<T>> subscription) {
-    RefPtr<_Stream<T>> self = this;
-    _thread->runOnThread([self, subscription]() {
-        self->_subscriptions.remove(subscription);
-    });
-}
-
-template <typename T>
-void _Stream<T>::_pause(bool state) {
-    RefPtr<_Stream<T>> self = this;
-    _thread->runOnThread([self, state]() {
-        self->_isPaused = state;
-    });
-}
-
-template <typename T>
-void _Stream<T>::_add(RefPtr<T> object) {
-    assert(_isPaused == false);
-    RefPtr<_Stream<T>> self = this;
-    _thread->runOnThread([self, object]() {
-        std::list<RefPtr<_StreamSubscription<T>>> subscriptions = self->_subscriptions;
-        for (RefPtr<_StreamSubscription<T>> subscription : subscriptions) {
-            subscription->_add(object);
-        }
-    });
-}
-
-template <typename T>
-void _Stream<T>::_error() {
-    RefPtr<_Stream<T>> self = this;
-    _thread->runOnThread([self]() {
-        std::list<RefPtr<_StreamSubscription<T>>> subscriptions = self->_subscriptions;
-        for (RefPtr<_StreamSubscription<T>> subscription : subscriptions) {
-            subscription->_error();
-        }
-    });
-}
-
-template <typename T>
-void _Stream<T>::_close() {
-    RefPtr<_Stream<T>> self = this;
-    _thread->runOnThread([self]() {
-        std::list<RefPtr<_StreamSubscription<T>>> subscriptions = self->_subscriptions;
-        for (RefPtr<_StreamSubscription<T>> subscription : subscriptions) {
-            subscription->cancel();
-        }
-        self->_isClosed = true;
-    });
-}
-
-template <typename T>
-RefPtr<StreamController<T>> StreamController<T>::from(Thread* thread) {
-    return new _StreamController<T>(thread);
+RefPtr<StreamController<T>> StreamController<T>::sync(Thread* thread) {
+    RefPtr<_SyncStreamController<T>> controller = new _SyncStreamController<T>(thread);
+    return controller;
 }
 
 OMP_FFMPEG_NAMESPACE_END

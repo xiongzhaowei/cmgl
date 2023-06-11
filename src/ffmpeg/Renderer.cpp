@@ -8,19 +8,52 @@
 
 OMP_FFMPEG_USING_NAMESPACE
 
+Renderer::Renderer(DecoderStream* stream) {
+    AVCodecParameters* codecpar = stream->stream()->codecpar;
+    _timebase = av_q2d(stream->stream()->time_base);
+    if (codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+        _timebase *= codecpar->frame_size;
+    }
+    _subscription = stream->listen(this);
+}
+
+void Renderer::add(RefPtr<Frame> frame) {
+    RefPtr<Frame> video;
+    if (_converter) {
+        video = _converter->convert(frame);
+    } else {
+        video = Frame::alloc();
+        video->swap(frame);
+    }
+    _frameList.push(video);
+    if (duration() >= 0.1) {
+        _subscription->pause();
+    }
+}
+
+void Renderer::addError() {
+}
+
+void Renderer::close() {
+    if (_subscription != nullptr) {
+        _subscription->cancel();
+        _subscription = nullptr;
+    }
+}
+
+double Renderer::duration() {
+    return _frameList.size() * _timebase;
+}
+
 static void SDLCALL __AudioRendererCallback(void* userdata, Uint8* stream, int len) {
     reinterpret_cast<AudioRenderer*>(userdata)->fill(stream, len);
 }
 
-RefPtr<AudioRenderer> AudioRenderer::from(
-    RefPtr<Stream<Frame>> stream,
-    SDL_AudioFormat format,
-    AVCodecParameters* codecpar,
-    double timebase
-) {
+RefPtr<AudioRenderer> AudioRenderer::from(DecoderStream* stream, SDL_AudioFormat format) {
     SDL_Init(SDL_INIT_AUDIO);
 
-    RefPtr<AudioRenderer> renderer = new AudioRenderer;
+    AVCodecParameters* codecpar = stream->stream()->codecpar;
+    RefPtr<AudioRenderer> renderer = new AudioRenderer(stream);
 
     SDL_AudioSpec spec = { 0 };
     spec.freq = codecpar->sample_rate;
@@ -31,41 +64,17 @@ RefPtr<AudioRenderer> AudioRenderer::from(
     spec.callback = __AudioRendererCallback;
     spec.userdata = renderer.value();
 
-    renderer->_timebase = timebase * codecpar->frame_size;
-    renderer->_subscription = stream->listen(renderer);
     renderer->_audioDeviceID = SDL_OpenAudioDevice(NULL, 0, &spec, &renderer->_audioSpec, 0);
     return (renderer->_audioDeviceID != 0) ? renderer : nullptr;
+}
+
+AudioRenderer::AudioRenderer(DecoderStream* stream) : Renderer(stream) {
 }
 
 AudioRenderer::~AudioRenderer() {
     if (_audioDeviceID != 0) {
         SDL_CloseAudioDevice(_audioDeviceID);
         _audioDeviceID = 0;
-    }
-}
-
-void AudioRenderer::add(RefPtr<Frame> frame) {
-    RefPtr<Frame> audio;
-    if (_converter) {
-        audio = _converter->convert(frame);
-    } else {
-        audio = Frame::alloc();
-        audio->swap(frame);
-    }
-    _frameList.push(audio);
-    if (duration() >= 0.1) {
-        _subscription->pause();
-    }
-}
-
-void AudioRenderer::addError() {
-
-}
-
-void AudioRenderer::close() {
-    if (_subscription != nullptr) {
-        _subscription->cancel();
-        _subscription = nullptr;
     }
 }
 
@@ -94,53 +103,19 @@ void AudioRenderer::play(bool state) {
     SDL_PauseAudioDevice(_audioDeviceID, state ? 0 : 1);
 }
 
-double AudioRenderer::duration() {
-    return _frameList.size() * _timebase;
-}
-
-RefPtr<VideoRenderer> VideoRenderer::from(
-    RefPtr<Stream<Frame>> stream,
-    RefPtr<render::VideoSource> source,
-    AVCodecParameters* codecpar,
-    double timebase,
-    std::function<void()> callback
-) {
+RefPtr<VideoRenderer> VideoRenderer::from(DecoderStream* stream, RefPtr<render::VideoSource> source, std::function<void()> callback) {
     if (!stream) return nullptr;
-    if (!codecpar) return nullptr;
 
-    RefPtr<VideoRenderer> renderer = new VideoRenderer;
-    renderer->_timebase = timebase;
-    renderer->_subscription = stream->listen(renderer);
+    RefPtr<VideoRenderer> renderer = new VideoRenderer(stream);
     renderer->_source = source;
     renderer->_callback = callback;
     return renderer;
 }
 
+VideoRenderer::VideoRenderer(DecoderStream* stream) : Renderer(stream) {
+}
+
 VideoRenderer::~VideoRenderer() {
-}
-
-void VideoRenderer::add(RefPtr<Frame> frame) {
-    RefPtr<Frame> video;
-    if (_converter) {
-        video = _converter->convert(frame);
-    } else {
-        video = Frame::alloc();
-        video->swap(frame);
-    }
-    _frameList.push(video);
-    if (duration() >= 0.1) {
-        _subscription->pause();
-    }
-}
-
-void VideoRenderer::addError() {
-}
-
-void VideoRenderer::close() {
-    if (_subscription != nullptr) {
-        _subscription->cancel();
-        _subscription = nullptr;
-    }
 }
 
 void VideoRenderer::sync(double pts) {
@@ -153,8 +128,4 @@ void VideoRenderer::sync(double pts) {
     if (duration() < 0.1) {
         _subscription->resume();
     }
-}
-
-double VideoRenderer::duration() {
-    return _frameList.size() * _timebase;
 }

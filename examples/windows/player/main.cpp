@@ -45,8 +45,8 @@ int APIENTRY wWinMain(
         w->addSubview(caption);
         w->showWindow(SW_SHOW);
 
-        audio = wheel::ffmpeg::AudioRenderer::from(movie->audio(), AUDIO_F32, movie->audio()->stream()->codecpar, av_q2d(movie->audio()->stream()->time_base));
-        video = wheel::ffmpeg::VideoRenderer::from(movie->video(), source, movie->video()->stream()->codecpar, av_q2d(movie->video()->stream()->time_base), [w]() {
+        audio = wheel::ffmpeg::AudioRenderer::from(movie->audio(), AUDIO_F32);
+        video = wheel::ffmpeg::VideoRenderer::from(movie->video(), source, [w]() {
             PostMessage(w->handle(), WM_USER, 0, 0); // 通知刷新画面
         });
         audio->attach(video);
