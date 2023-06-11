@@ -22,6 +22,7 @@ extern "C" {
 #include <libswscale/swscale.h>
 #include <libswresample/swresample.h>
 }
+#include "Error.h"
 #include "Frame.h"
 #include "Stream.h"
 #include "Decoder.h"
