@@ -29,3 +29,4 @@ extern "C" {
 #include "Thread.h"
 #include "Converter.h"
 #include "Renderer.h"
+#include "Source.h"

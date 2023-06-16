@@ -18,7 +18,7 @@ public:
 
     void _whenCompleted(T result) {
         RefPtr<_AsyncFuture<T>> self = this;
-        _thread->runOnThread([self, result]() {
+        this->_thread->runOnThread([self, result]() {
             self->_result = result;
             self->_isCompleted = true;
 
@@ -31,7 +31,7 @@ public:
 
     void then(const std::function<void(T)>& onValue) override {
         RefPtr<_AsyncFuture<T>> self = this;
-        _thread->runOnThread([onValue, self]() {
+        this->_thread->runOnThread([onValue, self]() {
             if (self->_isCompleted) {
                 onValue(self->_result);
             } else {

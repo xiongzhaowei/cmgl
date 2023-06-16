@@ -95,7 +95,7 @@ void AudioRenderer::fill(uint8_t* stream, int len) {
     }
 }
 
-void AudioRenderer::attach(VideoRenderer* renderer) {
+void AudioRenderer::attach(Renderer* renderer) {
     _video = renderer;
 }
 

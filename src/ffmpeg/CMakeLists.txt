@@ -15,4 +15,6 @@
     Renderer.h
     Thread.cpp
     Thread.h
+    Source.cpp
+    Source.h
 )

@@ -12,7 +12,7 @@ static std::string __av_err2str(int error) {
 }
 
 void Error::print() {
-    printf("Error:\n\tfrom: %s(%d)\n\tcode: %d\n\tmessage: %s", method.c_str(), line, code, message.c_str());
+    printf("Error:\n\tfrom: %s(%d)\n\tcode: %d\n\tmessage: %s\n", method.c_str(), line, code, message.c_str());
 }
 
 bool Error::verify(int error, const char* method, int line) {

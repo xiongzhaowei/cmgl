@@ -17,6 +17,7 @@ public:
     void close() override;
 
     double duration();
+    virtual void sync(double pts) {}
 protected:
     double _timebase;
     FrameList _frameList;
@@ -36,10 +37,10 @@ public:
     ~AudioRenderer();
 
     void fill(uint8_t* stream, int len);
-    void attach(VideoRenderer* renderer);
+    void attach(Renderer* renderer);
     void play(bool state);
 private:
-    RefPtr<VideoRenderer> _video;
+    RefPtr<Renderer> _video;
     SDL_AudioSpec _audioSpec = { 0 };
     SDL_AudioDeviceID _audioDeviceID = 0;
 };

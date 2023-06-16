@@ -26,7 +26,7 @@ int APIENTRY wWinMain(
     _In_ int show_command
 ) {
     RefPtr<Thread> thread = new Thread;
-    RefPtr<ffmpeg::StreamController<Object>> streamController = ffmpeg::StreamController<Object>::from(thread);
+    RefPtr<ffmpeg::StreamController<Object>> streamController = ffmpeg::StreamController<Object>::sync(thread);
     RefPtr<TestConsumer> consumer = new TestConsumer;
     WeakPtr<ffmpeg::StreamSubscription<Object>> subscription = streamController->stream()->listen(consumer);
 

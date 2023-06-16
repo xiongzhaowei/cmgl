@@ -91,7 +91,7 @@ DecoderStream* DecoderStream::from(AVStream* stream, Thread* thread) {
     return new DecoderStream(stream, context, thread);
 }
 
-DecoderStream::DecoderStream(AVStream* stream, AVCodecContext* context, Thread* thread) : _stream(stream), _context(context), _controller(StreamController<Frame>::sync(thread)) {
+DecoderStream::DecoderStream(AVStream* stream, AVCodecContext* context, Thread* thread) : _stream(stream), _context(context), _controller(StreamController<Frame>::sync([thread = RefPtr<Thread>(thread)]() { thread->runOnThread([]() {}); }, [thread = RefPtr<Thread>(thread)]() { thread->runOnThread([]() {}); })) {
 
 }
 

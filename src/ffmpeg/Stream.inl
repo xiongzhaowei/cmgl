@@ -26,12 +26,13 @@ class _SyncStreamController : public StreamController<T> {
     volatile bool _isClosed = false;
     std::mutex _mutex;
     std::list<RefPtr<_StreamSubscription<T>>> _subscriptions;
-    RefPtr<Thread> _thread;
     RefPtr<Stream<T>> _stream;
+    std::function<void()> _onPauseCallback;
+    std::function<void()> _onResumeCallback;
 public:
-    _SyncStreamController(Thread* thread) : _thread(thread), _stream(new _Stream<T>(this)) { assert(thread != nullptr); }
+    _SyncStreamController(const std::function<void()>& pause, const std::function<void()>& resume);
 
-    void add(Element object) override {
+    void add(Consumer<T>::Element object) override {
         _mutex.lock();
         std::list<RefPtr<_StreamSubscription<T>>> subscriptions = _subscriptions;
         _mutex.unlock();
@@ -97,14 +98,14 @@ public:
         _mutex.lock();
         _isPaused = true;
         _mutex.unlock();
-        _thread->runOnThread([]() {});
+        if (_onPauseCallback) _onPauseCallback();
     }
 
     void _onResume(_StreamSubscription<T>* subscription) {
         _mutex.lock();
         _isPaused = false;
         _mutex.unlock();
-        _thread->runOnThread([]() {});
+        if (_onResumeCallback) _onResumeCallback();
     }
 
 };
@@ -118,6 +119,12 @@ public:
         return _controller->_listen(consumer);
     }
 };
+
+template <typename T>
+_SyncStreamController<T>::_SyncStreamController(
+    const std::function<void()>& pause,
+    const std::function<void()>& resume
+) : _stream(new _Stream<T>(this)), _onPauseCallback(pause), _onResumeCallback(resume) {}
 
 template <typename T>
 void _StreamSubscription<T>::cancel() {
@@ -135,8 +142,8 @@ void _StreamSubscription<T>::resume() {
 }
 
 template <typename T>
-RefPtr<StreamController<T>> StreamController<T>::sync(Thread* thread) {
-    RefPtr<_SyncStreamController<T>> controller = new _SyncStreamController<T>(thread);
+RefPtr<StreamController<T>> StreamController<T>::sync(const std::function<void()>& onPause, const std::function<void()>& onResume) {
+    RefPtr<_SyncStreamController<T>> controller = new _SyncStreamController<T>(onPause, onResume);
     return controller;
 }
 
