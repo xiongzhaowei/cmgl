@@ -9,7 +9,6 @@ OMP_FFMPEG_NAMESPACE_BEGIN
 template <typename T>
 class Consumer;
 
-template <typename T>
 class StreamSubscription : public Object {
 public:
     virtual void cancel() = 0;
@@ -22,10 +21,20 @@ class Stream : public Object {
 public:
     typedef typename std::conditional<std::is_base_of<RefCounted, T>::value, RefPtr<T>, T>::type Element;
 
-    virtual RefPtr<StreamSubscription<T>> listen(RefPtr<Consumer<T>> consumer) = 0;
+    virtual RefPtr<StreamSubscription> listen(RefPtr<Consumer<T>> consumer) = 0;
 
     template <typename Target>
     RefPtr<Stream<Target>> convert(std::function<typename Stream<Target>::Element(typename Element)> convert);
+
+    template <typename Target>
+    RefPtr<Stream<Target>> transform(std::function<RefPtr<Consumer<T>>(RefPtr<Consumer<Target>>)> mapper);
+
+    template <typename Transformer, typename ...Args>
+    RefPtr<Stream<typename std::enable_if<
+        std::is_base_of<Consumer<T>, Transformer>::value &&
+        std::is_constructible<Transformer, RefPtr<Consumer<typename Transformer::Target>>, Args...>::value
+        , typename Transformer::Target>::type>>
+    transform(Args... args);
 };
 
 template <typename T>
@@ -36,6 +45,12 @@ public:
     virtual void add(Element object) = 0;
     virtual void addError() = 0;
     virtual void close() = 0;
+};
+
+template <typename Source, typename Target = Source>
+class Transformer : public Consumer<Source> {
+public:
+    typedef Target Target;
 };
 
 template <typename T>
@@ -62,13 +77,42 @@ RefPtr<Stream<Target>> Stream<T>::convert(std::function<typename Stream<Target>:
         void add(Consumer<T>::Element object) override { _controller->add(_convert(object)); }
         void addError() override { _controller->addError(); }
         void close() override { _controller->close(); }
-        RefPtr<StreamSubscription<Target>> listen(RefPtr<Consumer<Target>> consumer) override {
+        RefPtr<StreamSubscription> listen(RefPtr<Consumer<Target>> consumer) override {
             return _controller->stream()->listen(consumer);
         }
     };
     RefPtr<Converter> converter = new Converter(convert);
     listen(converter);
     return converter;
+}
+
+template <typename T>
+template <typename Target>
+RefPtr<Stream<Target>> Stream<T>::transform(std::function<RefPtr<Consumer<T>>(RefPtr<Consumer<Target>>)> mapper) {
+    class _Stream : public Stream<Target> {
+        RefPtr<Stream<T>> _stream;
+        std::function<RefPtr<Consumer<T>>(RefPtr<Consumer<Target>>)> _mapper;
+    public:
+        _Stream(RefPtr<Stream<T>> stream, std::function<RefPtr<Consumer<T>>(RefPtr<Consumer<Target>>)> mapper) : _stream(stream), _mapper(mapper) {}
+        RefPtr<StreamSubscription> listen(RefPtr<Consumer<Target>> consumer) override {
+            return _stream->listen(_mapper(consumer));
+        }
+    };
+    return new _Stream(this, mapper);
+}
+
+template <typename T>
+template <typename Transformer, typename ...Args>
+RefPtr<Stream<typename std::enable_if<
+    std::is_base_of<Consumer<T>, Transformer>::value &&
+    std::is_constructible<Transformer, RefPtr<Consumer<typename Transformer::Target>>, Args...>::value
+    , typename Transformer::Target>::type>>
+Stream<T>::transform(Args... args) {
+    return transform(
+        std::function<RefPtr<Consumer<T>>(RefPtr<Consumer<typename Transformer::Target>>)>(
+            [args...](RefPtr<Consumer<Frame>> consumer) { return new Transformer(consumer, args...); }
+        )
+    );
 }
 
 OMP_FFMPEG_NAMESPACE_END

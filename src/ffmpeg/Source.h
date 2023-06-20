@@ -30,7 +30,7 @@ public:
     bool available() const;
     bool read();
 
-    RefPtr<StreamSubscription<Packet>> listen(RefPtr<Consumer<Packet>> consumer) override;
+    RefPtr<StreamSubscription> listen(RefPtr<Consumer<Packet>> consumer) override;
 };
 
 class FileSourceStream : public Consumer<Packet>, public Stream<Frame> {
@@ -43,13 +43,14 @@ class FileSourceStream : public Consumer<Packet>, public Stream<Frame> {
 public:
     ~FileSourceStream();
 
-    RefPtr<StreamSubscription<Frame>> listen(RefPtr<Consumer<Frame>> consumer) override;
+    RefPtr<StreamSubscription> listen(RefPtr<Consumer<Frame>> consumer) override;
 
     void add(RefPtr<Packet> packet) override;
     void addError() override;
     void close() override;
 
     AVStream* stream() const;
+    AVCodecContext* context() const;
     bool available() const;
     bool match(AVFormatContext* format, AVPacket* packet) const;
     bool decode(AVPacket* packet, RefPtr<Frame> frame);
@@ -91,6 +92,8 @@ public:
 
     bool open(AVSampleFormat format, int32_t bit_rate, int32_t sample_rate, const AVChannelLayout& ch_layout, AVDictionary* options = nullptr);
     bool open(AVPixelFormat format, int32_t bit_rate, int32_t frame_rate, int32_t width, int32_t height, int32_t gop_size, int32_t max_b_frames, AVDictionary* options = nullptr);
+
+    AVCodecContext* context() const;
 
     static FileTargetStream* from(FileTarget* target, const AVCodec* codec);
     static FileTargetStream* audio(FileTarget* target);

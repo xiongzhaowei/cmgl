@@ -22,7 +22,7 @@ protected:
     double _timebase;
     FrameList _frameList;
     RefPtr<Converter> _converter;
-    RefPtr<StreamSubscription<Frame>> _subscription;
+    RefPtr<StreamSubscription> _subscription;
 };
 
 class VideoRenderer;

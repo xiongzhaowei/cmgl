@@ -21,7 +21,7 @@ public:
 
     RefPtr<Frame> convert(RefPtr<Frame> frame) override;
 
-    static AudioConverter* create(AVStream* stream, AVSampleFormat format);
+    static AudioConverter* create(AVStream* stream, AVSampleFormat format, AVChannelLayout ch_layout);
 };
 
 class VideoConverter : public Converter {

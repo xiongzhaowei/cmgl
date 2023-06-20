@@ -99,7 +99,7 @@ DecoderStream::~DecoderStream() {
     if (_context) avcodec_free_context(&_context);
 }
 
-RefPtr<StreamSubscription<Frame>> DecoderStream::listen(RefPtr<Consumer<Frame>> consumer) {
+RefPtr<StreamSubscription> DecoderStream::listen(RefPtr<Consumer<Frame>> consumer) {
     return _controller->stream()->listen(consumer);
 }
 

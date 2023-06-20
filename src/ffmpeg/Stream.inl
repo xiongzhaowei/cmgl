@@ -10,7 +10,7 @@ template <typename T>
 class _SyncStreamController;
 
 template <typename T>
-class _StreamSubscription : public StreamSubscription<T> {
+class _StreamSubscription : public StreamSubscription {
 public:
     WeakPtr<_SyncStreamController<T>> _controller;
     RefPtr<Consumer<T>> _consumer;
@@ -72,7 +72,7 @@ public:
         return _stream;
     }
 
-    RefPtr<StreamSubscription<T>> _listen(RefPtr<Consumer<T>> consumer) {
+    RefPtr<StreamSubscription> _listen(RefPtr<Consumer<T>> consumer) {
         if (isClosed()) {
             consumer->close();
             return nullptr;
@@ -115,7 +115,7 @@ class _Stream : public Stream<T> {
     WeakPtr<_SyncStreamController<T>> _controller;
 public:
     _Stream(_SyncStreamController<T>* controller) : _controller(controller) {}
-    RefPtr<StreamSubscription<T>> listen(RefPtr<Consumer<T>> consumer) {
+    RefPtr<StreamSubscription> listen(RefPtr<Consumer<T>> consumer) {
         return _controller->_listen(consumer);
     }
 };

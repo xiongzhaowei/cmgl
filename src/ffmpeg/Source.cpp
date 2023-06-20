@@ -25,7 +25,16 @@ FileSource::FileSource(Thread* thread) : _packet(new Packet), _thread(thread), _
 }
 
 bool FileSource::open(const std::string& filename) {
-	return Error::verify(avformat_open_input(&_context, filename.c_str(), nullptr, nullptr), __FUNCSIG__, __LINE__);
+	AVFormatContext* context = nullptr;
+
+	if (Error::verify(avformat_open_input(&context, filename.c_str(), nullptr, nullptr), __FUNCSIG__, __LINE__)) {
+		if (Error::verify(avformat_find_stream_info(context, nullptr), __FUNCSIG__, __LINE__)) {
+			_context = context;
+			return true;
+		}
+		avformat_close_input(&context);
+	}
+	return false;
 }
 
 void FileSource::close() {
@@ -45,7 +54,7 @@ bool FileSource::read() {
 	return false;
 }
 
-RefPtr<StreamSubscription<Packet>> FileSource::listen(RefPtr<Consumer<Packet>> consumer) {
+RefPtr<StreamSubscription> FileSource::listen(RefPtr<Consumer<Packet>> consumer) {
 	return _controller->stream()->listen(consumer);
 }
 
@@ -57,7 +66,7 @@ FileSourceStream::~FileSourceStream() {
 	if (_context) avcodec_free_context(&_context);
 }
 
-RefPtr<StreamSubscription<Frame>> FileSourceStream::listen(RefPtr<Consumer<Frame>> consumer) {
+RefPtr<StreamSubscription> FileSourceStream::listen(RefPtr<Consumer<Frame>> consumer) {
 	return _controller->stream()->listen(consumer);
 }
 
@@ -128,6 +137,10 @@ FileSourceStream* FileSourceStream::video(FileSource* source) {
 
 AVStream* FileSourceStream::stream() const {
 	return _stream;
+}
+
+AVCodecContext* FileSourceStream::context() const {
+	return _context;
 }
 
 bool FileSourceStream::available() const {
@@ -362,4 +375,8 @@ bool FileTargetStream::open(AVPixelFormat format, int32_t bit_rate, int32_t fram
 		avcodec_free_context(&context);
 	}
 	return false;
+}
+
+AVCodecContext* FileTargetStream::context() const {
+	return _context;
 }

@@ -40,11 +40,11 @@ RefPtr<Frame> AudioConverter::convert(RefPtr<Frame> frame) {
     return nullptr;
 }
 
-AudioConverter* AudioConverter::create(AVStream* stream, AVSampleFormat format) {
+AudioConverter* AudioConverter::create(AVStream* stream, AVSampleFormat format, AVChannelLayout ch_layout) {
     if (stream->codecpar->codec_type != AVMEDIA_TYPE_AUDIO) return nullptr;
 
     SwrContext* swrContext = NULL;
-    swr_alloc_set_opts2(&swrContext, &stream->codecpar->ch_layout, format, stream->codecpar->sample_rate, &stream->codecpar->ch_layout, (AVSampleFormat)stream->codecpar->format, stream->codecpar->sample_rate, 0, nullptr);
+    swr_alloc_set_opts2(&swrContext, &ch_layout, format, stream->codecpar->sample_rate, &stream->codecpar->ch_layout, (AVSampleFormat)stream->codecpar->format, stream->codecpar->sample_rate, 0, nullptr);
     if (swrContext) {
         if (swr_init(swrContext) >= 0) {
             return new AudioConverter(swrContext, format, stream->codecpar->ch_layout, stream->codecpar->sample_rate);
