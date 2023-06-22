@@ -170,7 +170,7 @@ int main() {
         //    printf("audio pts: %lld\n", frame->frame()->pts);
         //    return frame;
         //});
-        RefPtr<Converter> converter = ffmpeg::AudioConverter::create(audioSource->stream(), audioTarget->context()->sample_fmt, audioTarget->context()->ch_layout);
+        RefPtr<Converter<Frame>> converter = ffmpeg::AudioConverter::create(audioSource->stream(), audioTarget->context()->sample_fmt, audioTarget->context()->ch_layout);
         RefPtr<ffmpeg::Stream<ffmpeg::Frame>> audioFilter = audioSource->convert<ffmpeg::Frame>([converter](RefPtr<ffmpeg::Frame> frame) {
             return converter->convert(frame);
         })->transform<AudioSplitter>(audioTarget->context());

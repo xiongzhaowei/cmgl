@@ -48,6 +48,11 @@ public:
 };
 
 template <typename Source, typename Target = Source>
+struct Converter : public Object {
+    virtual typename Stream<Target>::Element convert(typename Stream<Source>::Element object) = 0;
+};
+
+template <typename Source, typename Target = Source>
 class Transformer : public Consumer<Source> {
 public:
     typedef Target Target;

@@ -21,7 +21,7 @@ public:
 protected:
     double _timebase;
     FrameList _frameList;
-    RefPtr<Converter> _converter;
+    RefPtr<Converter<Frame>> _converter;
     RefPtr<StreamSubscription> _subscription;
 };
 
