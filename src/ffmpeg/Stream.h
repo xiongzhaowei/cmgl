@@ -30,6 +30,10 @@ public:
     RefPtr<Stream<Target>> transform(std::function<RefPtr<Consumer<T>>(RefPtr<Consumer<Target>>)> mapper);
 
     template <typename Transformer, typename ...Args>
+    RefPtr<Stream<typename std::enable_if<std::is_base_of<Consumer<T>, Transformer>::value, typename Transformer::Target>::type>>
+    transform(RefPtr<Transformer>(*creater)(RefPtr<Consumer<typename Transformer::Target>>, Args...), Args... args);
+
+    template <typename Transformer, typename ...Args>
     RefPtr<Stream<typename std::enable_if<
         std::is_base_of<Consumer<T>, Transformer>::value &&
         std::is_constructible<Transformer, RefPtr<Consumer<typename Transformer::Target>>, Args...>::value
@@ -116,6 +120,17 @@ Stream<T>::transform(Args... args) {
     return transform(
         std::function<RefPtr<Consumer<T>>(RefPtr<Consumer<typename Transformer::Target>>)>(
             [args...](RefPtr<Consumer<Frame>> consumer) { return new Transformer(consumer, args...); }
+        )
+    );
+}
+
+template <typename T>
+template <typename Transformer, typename ...Args>
+RefPtr<Stream<typename std::enable_if<std::is_base_of<Consumer<T>, Transformer>::value, typename Transformer::Target>::type>>
+Stream<T>::transform(RefPtr<Transformer>(*creater)(RefPtr<Consumer<typename Transformer::Target>>, Args...), Args... args) {
+    return transform(
+        std::function<RefPtr<Consumer<T>>(RefPtr<Consumer<typename Transformer::Target>>)>(
+            [creater, args...](RefPtr<Consumer<Frame>> consumer) { return creater(consumer, args...); }
         )
     );
 }

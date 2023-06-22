@@ -148,7 +148,7 @@ int main() {
     std::string url = wcstombs(L"D:\\迅雷下载\\Guardian Of The Galaxy Volume 3 (2023) ENG HDTC 1080p x264 AAC - HushRips.mp4", CP_UTF8);
     std::string output = wcstombs(L"D:\\迅雷下载\\test.mpg", CP_UTF8);
 
-    RefPtr<ffmpeg::FileSource> source = new ffmpeg::FileSource(thread);
+    RefPtr<ffmpeg::MovieSource> source = new ffmpeg::MovieSource(thread);
     RefPtr<ffmpeg::FileTarget> target = ffmpeg::FileTarget::from(nullptr, output.c_str());
 
     RefPtr<ffmpeg::FileTargetStream> audioTarget = ffmpeg::FileTargetStream::audio(target);
@@ -161,16 +161,18 @@ int main() {
     target->writeHeader();
 
     if (source->open(url)) {
-        RefPtr<ffmpeg::FileSourceStream> videoSource = ffmpeg::FileSourceStream::video(source);
-        RefPtr<ffmpeg::FileSourceStream> audioSource = ffmpeg::FileSourceStream::audio(source);
-        source->listen(audioSource);
-        source->listen(videoSource);
+        RefPtr<ffmpeg::Stream<ffmpeg::Frame>> videoSource = source->transform(MovieDecoder::from, source->video());
+        RefPtr<ffmpeg::Stream<ffmpeg::Frame>> audioSource = source->transform(MovieDecoder::from, source->audio());
+        //RefPtr<ffmpeg::FileSourceStream> videoSource = ffmpeg::FileSourceStream::video(source);
+        //RefPtr<ffmpeg::FileSourceStream> audioSource = ffmpeg::FileSourceStream::audio(source);
+        //source->listen(audioSource);
+        //source->listen(videoSource);
 
         //RefPtr<ffmpeg::Stream<ffmpeg::Frame>> audioFilter = audioSource->convert<ffmpeg::Frame>([](RefPtr<ffmpeg::Frame> frame) {
         //    printf("audio pts: %lld\n", frame->frame()->pts);
         //    return frame;
         //});
-        RefPtr<Converter<Frame>> converter = ffmpeg::AudioConverter::create(audioSource->stream(), audioTarget->context()->sample_fmt, audioTarget->context()->ch_layout);
+        RefPtr<Converter<Frame>> converter = ffmpeg::AudioConverter::create(source->audio(), audioTarget->context()->sample_fmt, audioTarget->context()->ch_layout);
         RefPtr<ffmpeg::Stream<ffmpeg::Frame>> audioFilter = audioSource->convert<ffmpeg::Frame>([converter](RefPtr<ffmpeg::Frame> frame) {
             return converter->convert(frame);
         })->transform<AudioSplitter>(audioTarget->context());

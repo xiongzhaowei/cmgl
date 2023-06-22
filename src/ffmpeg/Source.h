@@ -16,16 +16,21 @@ public:
     void reset();
 };
 
-class FileSource : public Stream<Packet> {
+class MovieSource : public Stream<Packet> {
     friend class FileSourceStream;
     AVFormatContext* _context = nullptr;
     RefPtr<Packet> _packet;
     RefPtr<StreamController<Packet>> _controller;
     RefPtr<Thread> _thread;
 public:
-    FileSource(Thread* thread);
+    MovieSource(Thread* thread);
     bool open(const std::string& filename);
     void close();
+
+    RefPtr<Thread> thread() const;
+    AVFormatContext* context() const;
+    AVStream* audio() const;
+    AVStream* video() const;
 
     bool available() const;
     bool read();
@@ -33,17 +38,14 @@ public:
     RefPtr<StreamSubscription> listen(RefPtr<Consumer<Packet>> consumer) override;
 };
 
-class FileSourceStream : public Consumer<Packet>, public Stream<Frame> {
-    friend class FileTargetStream;
+class MovieDecoder : public Transformer<Packet, Frame> {
+    RefPtr<Consumer<Frame>> _output;
+    RefPtr<Frame> _frame;
     AVStream* _stream;
     AVCodecContext* _context;
-    RefPtr<Frame> _frame = Frame::alloc();
-    RefPtr<StreamController<Frame>> _controller;
-    FileSourceStream(AVStream* stream, AVCodecContext* context, Thread* thread);
 public:
-    ~FileSourceStream();
-
-    RefPtr<StreamSubscription> listen(RefPtr<Consumer<Frame>> consumer) override;
+    MovieDecoder(RefPtr<Consumer<Frame>> output, AVStream* stream, AVCodecContext* context);
+    ~MovieDecoder();
 
     void add(RefPtr<Packet> packet) override;
     void addError() override;
@@ -51,13 +53,29 @@ public:
 
     AVStream* stream() const;
     AVCodecContext* context() const;
-    bool available() const;
-    bool match(AVFormatContext* format, AVPacket* packet) const;
-    bool decode(AVPacket* packet, RefPtr<Frame> frame);
 
-    static FileSourceStream* from(AVStream* stream, Thread* thread);
-    static FileSourceStream* audio(FileSource* source);
-    static FileSourceStream* video(FileSource* source);
+    bool available() const;
+
+    static RefPtr<MovieDecoder> from(RefPtr<Consumer<Frame>> output, AVStream* stream);
+};
+
+class MovieSourceStream : public Stream<Frame> {
+    RefPtr<StreamController<Frame>> _controller;
+    RefPtr<MovieDecoder> _decoder;
+public:
+    MovieSourceStream(RefPtr<StreamController<Frame>> controller, RefPtr<MovieDecoder> decoder);
+
+    RefPtr<StreamSubscription> listen(RefPtr<Consumer<Frame>> consumer) override;
+
+    AVStream* stream() const;
+    AVCodecContext* context() const;
+    RefPtr<MovieDecoder> decoder() const;
+
+    bool available() const;
+
+    static MovieSourceStream* from(AVStream* stream, Thread* thread);
+    static MovieSourceStream* audio(MovieSource* source);
+    static MovieSourceStream* video(MovieSource* source);
 };
 
 class FileTarget : public Consumer<Packet> {
@@ -80,7 +98,7 @@ public:
     static FileTarget* from(const char* format, const char* filename = nullptr);
 };
 
-class FileTargetStream : public Consumer<Frame> {
+class FileTargetStream : public Transformer<Frame, Packet> {
     RefPtr<FileTarget> _owner;
     AVStream* _stream;
     AVCodecContext* _context;

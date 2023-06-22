@@ -21,10 +21,10 @@ void Packet::reset() {
 	av_packet_unref(_packet);
 }
 
-FileSource::FileSource(Thread* thread) : _packet(new Packet), _thread(thread), _controller(StreamController<Packet>::sync([thread = RefPtr<Thread>(thread)]() { thread->runOnThread([]() {}); }, [thread = RefPtr<Thread>(thread)]() { thread->runOnThread([]() {}); })) {
+MovieSource::MovieSource(Thread* thread) : _packet(new Packet), _thread(thread), _controller(StreamController<Packet>::sync([thread = RefPtr<Thread>(thread)]() { thread->runOnThread([]() {}); }, [thread = RefPtr<Thread>(thread)]() { thread->runOnThread([]() {}); })) {
 }
 
-bool FileSource::open(const std::string& filename) {
+bool MovieSource::open(const std::string& filename) {
 	AVFormatContext* context = nullptr;
 
 	if (Error::verify(avformat_open_input(&context, filename.c_str(), nullptr, nullptr), __FUNCSIG__, __LINE__)) {
@@ -37,15 +37,43 @@ bool FileSource::open(const std::string& filename) {
 	return false;
 }
 
-void FileSource::close() {
+void MovieSource::close() {
 	avformat_close_input(&_context);
 }
 
-bool FileSource::available() const {
+RefPtr<Thread> MovieSource::thread() const {
+	return _thread;
+}
+
+AVFormatContext* MovieSource::context() const {
+	return _context;
+}
+
+AVStream* MovieSource::audio() const {
+	for (uint32_t i = 0; i < _context->nb_streams; i++) {
+		AVStream* stream = _context->streams[i];
+		if (stream && stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+			return stream;
+		}
+	}
+	return nullptr;
+}
+
+AVStream* MovieSource::video() const {
+	for (uint32_t i = 0; i < _context->nb_streams; i++) {
+		AVStream* stream = _context->streams[i];
+		if (stream && stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+			return stream;
+		}
+	}
+	return nullptr;
+}
+
+bool MovieSource::available() const {
 	return !_controller->isPaused() && !_controller->isClosed();
 }
 
-bool FileSource::read() {
+bool MovieSource::read() {
 	if (Error::verify(av_read_frame(_context, _packet->packet()), __FUNCSIG__, __LINE__)) {
 		_controller->add(_packet);
 		_packet->reset();
@@ -54,23 +82,20 @@ bool FileSource::read() {
 	return false;
 }
 
-RefPtr<StreamSubscription> FileSource::listen(RefPtr<Consumer<Packet>> consumer) {
+RefPtr<StreamSubscription> MovieSource::listen(RefPtr<Consumer<Packet>> consumer) {
 	return _controller->stream()->listen(consumer);
 }
 
-FileSourceStream::FileSourceStream(AVStream* stream, AVCodecContext* context, Thread* thread) : _stream(stream), _context(context), _controller(StreamController<Frame>::sync([thread = RefPtr<Thread>(thread)]() { thread->runOnThread([]() {}); }, [thread = RefPtr<Thread>(thread)]() { thread->runOnThread([]() {}); })) {
-
+MovieDecoder::MovieDecoder(RefPtr<Consumer<Frame>> output, AVStream* stream, AVCodecContext* context) : _output(output), _stream(stream), _context(context), _frame(Frame::alloc()) {
+	assert(context != nullptr);
 }
 
-FileSourceStream::~FileSourceStream() {
-	if (_context) avcodec_free_context(&_context);
+MovieDecoder::~MovieDecoder() {
+	assert(_context != nullptr);
+	avcodec_free_context(&_context);
 }
 
-RefPtr<StreamSubscription> FileSourceStream::listen(RefPtr<Consumer<Frame>> consumer) {
-	return _controller->stream()->listen(consumer);
-}
-
-void FileSourceStream::add(RefPtr<Packet> packet) {
+void MovieDecoder::add(RefPtr<Packet> packet) {
 	if (packet == nullptr) return;
 	if (packet->packet() == nullptr) return;
 
@@ -84,21 +109,33 @@ void FileSourceStream::add(RefPtr<Packet> packet) {
 					}
 					break;
 				}
-				_controller->add(_frame);
+				_output->add(_frame);
 			}
 		}
 	}
 }
 
-void FileSourceStream::addError() {
-
+void MovieDecoder::addError() {
+	_output->addError();
 }
 
-void FileSourceStream::close() {
-
+void MovieDecoder::close() {
+	_output->close();
 }
 
-FileSourceStream* FileSourceStream::from(AVStream* stream, Thread* thread) {
+AVStream* MovieDecoder::stream() const {
+	return _stream;
+}
+
+AVCodecContext* MovieDecoder::context() const {
+	return _context;
+}
+
+bool MovieDecoder::available() const {
+	return true;
+}
+
+RefPtr<MovieDecoder> MovieDecoder::from(RefPtr<Consumer<Frame>> output, AVStream* stream) {
 	const AVCodec* codec = avcodec_find_decoder(stream->codecpar->codec_id);
 	if (!codec) return nullptr;
 
@@ -106,57 +143,56 @@ FileSourceStream* FileSourceStream::from(AVStream* stream, Thread* thread) {
 	avcodec_parameters_to_context(context, stream->codecpar);
 	if (avcodec_open2(context, codec, NULL) < 0) return nullptr;
 
-	return new FileSourceStream(stream, context, thread);
+	return new MovieDecoder(output, stream, context);
 }
 
-FileSourceStream* FileSourceStream::audio(FileSource* source) {
-	if (source == nullptr) return nullptr;
-	if (source->_context == nullptr) return nullptr;
+MovieSourceStream::MovieSourceStream(RefPtr<StreamController<Frame>> controller, RefPtr<MovieDecoder> decoder) : _controller(controller), _decoder(decoder) {
 
-	for (uint32_t i = 0; i < source->_context->nb_streams; i++) {
-		AVStream* stream = source->_context->streams[i];
-		if (stream && stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-			return FileSourceStream::from(stream, source->_thread);
-		}
-	}
-	return nullptr;
 }
 
-FileSourceStream* FileSourceStream::video(FileSource* source) {
-	if (source == nullptr) return nullptr;
-	if (source->_context == nullptr) return nullptr;
-
-	for (uint32_t i = 0; i < source->_context->nb_streams; i++) {
-		AVStream* stream = source->_context->streams[i];
-		if (stream && stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-			return FileSourceStream::from(stream, source->_thread);
-		}
-	}
-	return nullptr;
+RefPtr<StreamSubscription> MovieSourceStream::listen(RefPtr<Consumer<Frame>> consumer) {
+	return _controller->stream()->listen(consumer);
 }
 
-AVStream* FileSourceStream::stream() const {
-	return _stream;
+AVStream* MovieSourceStream::stream() const {
+	return _decoder->stream();
 }
 
-AVCodecContext* FileSourceStream::context() const {
-	return _context;
+AVCodecContext* MovieSourceStream::context() const {
+	return _decoder->context();
 }
 
-bool FileSourceStream::available() const {
-	return !_controller->isPaused() && !_controller->isClosed();
+RefPtr<MovieDecoder> MovieSourceStream::decoder() const {
+	return _decoder;
 }
 
-bool FileSourceStream::match(AVFormatContext* format, AVPacket* packet) const {
-	return format->streams[packet->stream_index] == _stream;
+bool MovieSourceStream::available() const {
+	return _decoder->available();
 }
 
-bool FileSourceStream::decode(AVPacket* packet, RefPtr<Frame> frame) {
-	if (avcodec_send_packet(_context, packet) < 0) return false;
-	if (avcodec_receive_frame(_context, frame->frame()) < 0) return false;
+MovieSourceStream* MovieSourceStream::from(AVStream* stream, Thread* thread) {
+	const AVCodec* codec = avcodec_find_decoder(stream->codecpar->codec_id);
+	if (!codec) return nullptr;
 
-	_controller->add(frame);
-	return true;
+	AVCodecContext* context = avcodec_alloc_context3(codec);
+	avcodec_parameters_to_context(context, stream->codecpar);
+	if (avcodec_open2(context, codec, NULL) < 0) return nullptr;
+
+	std::function<void()> onPause = []() {
+	};
+	std::function<void()> onResume = []() {
+	};
+	RefPtr<StreamController<Frame>> controller = StreamController<Frame>::sync(onPause, onResume);
+	RefPtr<MovieDecoder> decoder = MovieDecoder::from(controller, stream);
+	return new MovieSourceStream(controller, decoder);
+}
+
+MovieSourceStream* MovieSourceStream::audio(MovieSource* source) {
+	return from(source->audio(), source->thread());
+}
+
+MovieSourceStream* MovieSourceStream::video(MovieSource* source) {
+	return from(source->video(), source->thread());
 }
 
 FileTarget* FileTarget::from(const char* format, const char* filename) {
@@ -173,6 +209,10 @@ FileTarget::FileTarget(AVFormatContext* context) : _context(context) {
 }
 
 FileTarget::~FileTarget() {
+	if (_context) {
+		avformat_free_context(_context);
+		_context = nullptr;
+	}
 }
 
 bool FileTarget::openFile(const std::string& filename) {
@@ -194,10 +234,6 @@ bool FileTarget::writeTrailer() {
 }
 
 void FileTarget::close() {
-	if (_context) {
-		avformat_free_context(_context);
-		_context = nullptr;
-	}
 }
 
 void FileTarget::add(RefPtr<Packet> packet) {
