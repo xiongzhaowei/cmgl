@@ -28,10 +28,11 @@ void Frame::swap(RefPtr<Frame> frame) {
     _frame = temp;
 }
 
-bool Frame::setAudioBuffer(AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples) {
+bool Frame::setAudioBuffer(AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples, int32_t sample_rate) {
     _frame->format = format;
     _frame->ch_layout = ch_layout;
     _frame->nb_samples = nb_samples;
+    _frame->sample_rate = sample_rate;
 
     if (av_frame_get_buffer(_frame, 1) < 0) return false;
     if (av_frame_make_writable(_frame) < 0) return false;
@@ -55,9 +56,9 @@ RefPtr<Frame> Frame::alloc() {
     return frame->_frame != nullptr ? frame : nullptr;
 }
 
-RefPtr<Frame> Frame::alloc(AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples) {
+RefPtr<Frame> Frame::alloc(AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples, int32_t sample_rate) {
     RefPtr<Frame> frame = new Frame();
-    return frame && frame->setAudioBuffer(format, ch_layout, nb_samples) ? frame : nullptr;
+    return frame && frame->setAudioBuffer(format, ch_layout, nb_samples, sample_rate) ? frame : nullptr;
 }
 
 RefPtr<Frame> Frame::alloc(AVPixelFormat format, int32_t width, int32_t height) {

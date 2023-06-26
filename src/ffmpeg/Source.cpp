@@ -69,6 +69,18 @@ AVStream* MovieSource::video() const {
 	return nullptr;
 }
 
+RefPtr<MovieSourceStream> MovieSource::stream(AVMediaType codecType) {
+	for (uint32_t i = 0; i < _context->nb_streams; i++) {
+		AVStream* stream = _context->streams[i];
+		if (stream && stream->codecpar->codec_type == codecType) {
+			RefPtr<MovieSourceStream> source = MovieSourceStream::from(stream, thread());
+			listen(source->decoder());
+			return source;
+		}
+	}
+	return nullptr;
+}
+
 bool MovieSource::available() const {
 	return !_controller->isPaused() && !_controller->isClosed();
 }
@@ -164,6 +176,10 @@ AVCodecContext* MovieSourceStream::context() const {
 
 RefPtr<MovieDecoder> MovieSourceStream::decoder() const {
 	return _decoder;
+}
+
+RefPtr<Stream<Frame>> MovieSourceStream::convert(AVChannelLayout ch_layout, AVSampleFormat sample_fmt, int32_t sample_rate) {
+	return Stream<Frame>::convert(AudioConverter::from(ch_layout, sample_fmt, sample_rate, _decoder->context()->ch_layout, _decoder->context()->sample_fmt, _decoder->context()->sample_rate));
 }
 
 bool MovieSourceStream::available() const {

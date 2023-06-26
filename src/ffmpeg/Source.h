@@ -16,6 +16,8 @@ public:
     void reset();
 };
 
+class MovieSourceStream;
+
 class MovieSource : public Stream<Packet> {
     friend class FileSourceStream;
     AVFormatContext* _context = nullptr;
@@ -31,6 +33,7 @@ public:
     AVFormatContext* context() const;
     AVStream* audio() const;
     AVStream* video() const;
+    RefPtr<MovieSourceStream> stream(AVMediaType codecType);
 
     bool available() const;
     bool read();
@@ -70,6 +73,7 @@ public:
     AVStream* stream() const;
     AVCodecContext* context() const;
     RefPtr<MovieDecoder> decoder() const;
+    RefPtr<Stream<Frame>> convert(AVChannelLayout ch_layout, AVSampleFormat sample_fmt, int32_t sample_rate);
 
     bool available() const;
 

@@ -7,49 +7,43 @@
 
 OMP_FFMPEG_USING_NAMESPACE
 
-AudioConverter::AudioConverter(SwrContext* context, AVSampleFormat format, AVChannelLayout ch_layout, int32_t sample_rate) : _context(context), _format(format), _ch_layout(ch_layout), _sample_rate(sample_rate) {
+AudioConverter::AudioConverter(SwrContext* context, AVChannelLayout out_ch_layout, AVSampleFormat out_sample_fmt, int32_t out_sample_rate, AVChannelLayout in_ch_layout, AVSampleFormat in_sample_fmt, int32_t in_sample_rate) : _context(context), _out_ch_layout(out_ch_layout), _out_sample_fmt(out_sample_fmt), _out_sample_rate(out_sample_rate), _in_ch_layout(in_ch_layout), _in_sample_fmt(in_sample_fmt), _in_sample_rate(in_sample_rate) {
 
 }
 
 AudioConverter::~AudioConverter() {
-    if (_context) {
-        swr_free(&_context);
-        _context = nullptr;
-    }
+    swr_free(&_context);
 }
 
 RefPtr<Frame> AudioConverter::convert(RefPtr<Frame> frame) {
-    RefPtr<Frame> output = Frame::alloc(_format, _ch_layout, frame->frame()->nb_samples);
+    if (frame == nullptr) return nullptr;
+    if (frame->frame() == nullptr) return nullptr;
+
+    int32_t delay = (int32_t)swr_get_delay(_context, _in_sample_rate);
+    int32_t out_nb_samples = (int32_t)av_rescale_rnd(frame->frame()->nb_samples + delay, _out_sample_rate, _in_sample_rate, AV_ROUND_UP);
+    RefPtr<Frame> output = Frame::alloc(_out_sample_fmt, _out_ch_layout, out_nb_samples, _out_sample_rate);
     if (nullptr == output) return nullptr;
 
-    const int bytesPerSample = av_get_bytes_per_sample(_format);
-    int samples_size = frame->frame()->nb_samples * frame->frame()->channels * bytesPerSample;
-
-    int nb_samples = swr_convert(_context, output->frame()->extended_data, samples_size, (const uint8_t**)frame->frame()->extended_data, frame->frame()->nb_samples);
-    if (nb_samples > 0) {
+    if (Error::verify(swr_convert_frame(_context, output->frame(), frame->frame()), __FUNCSIG__, __LINE__)) {
         output->frame()->best_effort_timestamp = frame->frame()->best_effort_timestamp;
-        output->frame()->nb_samples = nb_samples;
-        output->frame()->sample_rate = _sample_rate;
         output->frame()->pts = frame->frame()->pts;
         output->frame()->pkt_dts = frame->frame()->pkt_dts;
         output->frame()->pkt_pos = frame->frame()->pkt_pos;
         output->frame()->pkt_duration = frame->frame()->pkt_duration;
-        return output;
+    } else {
+        output = nullptr;
     }
-
-    return nullptr;
+    return output;
 }
 
-AudioConverter* AudioConverter::create(AVStream* stream, AVSampleFormat format, AVChannelLayout ch_layout) {
-    if (stream->codecpar->codec_type != AVMEDIA_TYPE_AUDIO) return nullptr;
-
-    SwrContext* swrContext = NULL;
-    swr_alloc_set_opts2(&swrContext, &ch_layout, format, stream->codecpar->sample_rate, &stream->codecpar->ch_layout, (AVSampleFormat)stream->codecpar->format, stream->codecpar->sample_rate, 0, nullptr);
-    if (swrContext) {
-        if (swr_init(swrContext) >= 0) {
-            return new AudioConverter(swrContext, format, stream->codecpar->ch_layout, stream->codecpar->sample_rate);
+RefPtr<AudioConverter> AudioConverter::from(AVChannelLayout out_ch_layout, AVSampleFormat out_sample_fmt, int32_t out_sample_rate, AVChannelLayout in_ch_layout, AVSampleFormat in_sample_fmt, int32_t in_sample_rate) {
+    SwrContext* context = nullptr;
+    swr_alloc_set_opts2(&context, &out_ch_layout, out_sample_fmt, out_sample_rate, &in_ch_layout, in_sample_fmt, in_sample_rate, 0, nullptr);
+    if (context) {
+        if (swr_init(context) >= 0) {
+            return new AudioConverter(context, out_ch_layout, out_sample_fmt, out_sample_rate, in_ch_layout, in_sample_fmt, in_sample_rate);
         }
-        swr_free(&swrContext);
+        swr_free(&context);
     }
     return nullptr;
 }

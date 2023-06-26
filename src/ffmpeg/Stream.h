@@ -26,6 +26,9 @@ public:
     template <typename Target>
     RefPtr<Stream<Target>> convert(std::function<typename Stream<Target>::Element(typename Element)> convert);
 
+    template <typename Converter>
+    RefPtr<Stream<typename Converter::Target>> convert(RefPtr<Converter> converter);
+
     template <typename Target>
     RefPtr<Stream<Target>> transform(std::function<RefPtr<Consumer<T>>(RefPtr<Consumer<Target>>)> mapper);
 
@@ -52,7 +55,10 @@ public:
 };
 
 template <typename Source, typename Target = Source>
-struct Converter : public Object {
+class Converter : public Object {
+public:
+    typedef Target Target;
+
     virtual typename Stream<Target>::Element convert(typename Stream<Source>::Element object) = 0;
 };
 
@@ -93,6 +99,26 @@ RefPtr<Stream<Target>> Stream<T>::convert(std::function<typename Stream<Target>:
     RefPtr<Converter> converter = new Converter(convert);
     listen(converter);
     return converter;
+}
+
+template <typename T>
+template <typename Converter>
+RefPtr<Stream<typename Converter::Target>> Stream<T>::convert(RefPtr<Converter> converter) {
+    class _Converter : public Consumer<T>, public Stream<typename Converter::Target> {
+        RefPtr<StreamController<typename Converter::Target>> _controller = StreamController<typename Converter::Target>::sync();
+        RefPtr<Converter> _converter;
+    public:
+        _Converter(RefPtr<Converter> converter) : _converter(converter) {}
+        void add(Consumer<T>::Element object) override { _controller->add(_converter->convert(object)); }
+        void addError() override { _controller->addError(); }
+        void close() override { _controller->close(); }
+        RefPtr<StreamSubscription> listen(RefPtr<Consumer<typename Converter::Target>> consumer) override {
+            return _controller->stream()->listen(consumer);
+        }
+    };
+    RefPtr<_Converter> stream = new _Converter(converter);
+    listen(stream);
+    return stream;
 }
 
 template <typename T>

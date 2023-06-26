@@ -15,11 +15,11 @@ public:
     AVFrame* frame() const;
     int64_t timestamp() const;
     void swap(RefPtr<Frame> frame);
-    bool setAudioBuffer(AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples);
+    bool setAudioBuffer(AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples, int32_t sample_rate);
     bool setVideoBuffer(AVPixelFormat format, int32_t width, int32_t height);
 
     static RefPtr<Frame> alloc();
-    static RefPtr<Frame> alloc(AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples);
+    static RefPtr<Frame> alloc(AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples, int32_t sample_rate);
     static RefPtr<Frame> alloc(AVPixelFormat format, int32_t width, int32_t height);
 };
 
