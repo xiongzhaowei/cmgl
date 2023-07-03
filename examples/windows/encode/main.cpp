@@ -21,63 +21,68 @@ const std::string wcstombs(const std::wstring& wstr, uint32_t codePage) {
 using namespace wheel;
 using namespace wheel::ffmpeg;
 
-template <typename T, bool planar>
-class AudioSplitterT : public Transformer<Frame> {
+class AudioSplitter : public Transformer<Frame> {
     RefPtr<Consumer<Frame>> _output;
-    AVSampleFormat _format;
-    AVChannelLayout _layout;
     RefPtr<Frame> _frame;
-    int32_t _sample_count;
-    int32_t _sampleTotal;
-    int32_t _sample_rate;
     int64_t _timestamp;
+    int32_t _sampleCount;
+    int32_t _sampleTotal;
+    int32_t _bytesPerSample;
+    bool _planar;
 public:
-    AudioSplitterT(RefPtr<Consumer<Frame>> output, AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples, int32_t sample_rate) : _output(output), _format(format), _layout(ch_layout), _sampleTotal(nb_samples), _sample_rate(sample_rate), _timestamp(0) {
+    AudioSplitter(RefPtr<Consumer<Frame>> output, int32_t nb_samples) : _output(output), _sampleTotal(nb_samples), _timestamp(0) {
         assert(output != nullptr);
-        assert(format != AV_SAMPLE_FMT_NONE);
-        assert(ch_layout.nb_channels > 0);
         assert(nb_samples > 0);
     }
     void copyData(uint8_t** data, int32_t offset, int32_t count, int32_t nb_channels) {
-        if (_frame == nullptr) {
-            _frame = Frame::alloc(_format, _layout, _sampleTotal, _sample_rate);
-            _sample_count = 0;
-        }
-        if (_sample_count + count >= _sampleTotal) {
-            int32_t copyCount = _sampleTotal - _sample_count;
+        assert(_frame != nullptr);
+        if (_sampleCount + count >= _sampleTotal) {
+            int32_t copyCount = _sampleTotal - _sampleCount;
             copy(data, offset, copyCount, nb_channels);
             offset += copyCount;
             count -= copyCount;
 
             _frame->frame()->pts = _timestamp;
             _output->add(_frame);
-            _frame = nullptr;
 
             if (count > 0) {
+                _frame = Frame::alloc((AVSampleFormat)_frame->frame()->format, _frame->frame()->ch_layout, _sampleTotal, _frame->frame()->sample_rate);
+                _sampleCount = 0;
                 copyData(data, offset, count, nb_channels);
+            } else {
+                _frame = nullptr;
             }
         } else {
             copy(data, offset, count, nb_channels);
         }
     }
     void copy(uint8_t** data, int32_t offset, int32_t count, int32_t nb_channels) {
-        if (planar) {
-            for (int channel = 0; channel < nb_channels; channel++) {
-                memcpy(_frame->frame()->extended_data[channel] + _sample_count * sizeof(T), data[channel] + offset * sizeof(T), count * sizeof(T));
-            }
-        } else {
-            memcpy(_frame->frame()->extended_data[0] + _sample_count * nb_channels * sizeof(T), data[0] + offset * nb_channels * sizeof(T), count * nb_channels * sizeof(T));
+        int32_t bytesPerSample = _bytesPerSample;
+        if (!_planar) {
+            bytesPerSample *= nb_channels;
+            nb_channels = 1;
+        }
+        for (int32_t channel = 0; channel < nb_channels; channel++) {
+            memcpy(_frame->frame()->extended_data[channel] + _sampleCount * bytesPerSample, data[channel] + offset * bytesPerSample, count * bytesPerSample);
         }
         _timestamp += count;
-        _sample_count += count;
+        _sampleCount += count;
     }
     void add(RefPtr<Frame> frame) override {
         if (frame == nullptr) return;
         if (frame->frame() == nullptr) return;
 
-        assert(av_channel_layout_compare(&_layout, &frame->frame()->ch_layout) == 0);
-        assert(_format == (AVSampleFormat)frame->frame()->format);
-
+        if (_frame == nullptr) {
+            AVSampleFormat format = (AVSampleFormat)frame->frame()->format;
+            _frame = Frame::alloc(format, frame->frame()->ch_layout, _sampleTotal, frame->frame()->sample_rate);
+            _planar = av_sample_fmt_is_planar(format);
+            _bytesPerSample = av_get_bytes_per_sample(format);
+            _sampleCount = 0;
+        } else {
+            assert(av_channel_layout_compare(&_frame->frame()->ch_layout, &frame->frame()->ch_layout) == 0);
+            assert(_frame->frame()->format == frame->frame()->format);
+            assert(_frame->frame()->sample_rate == frame->frame()->sample_rate);
+        }
         copyData(frame->frame()->extended_data, 0, frame->frame()->nb_samples, frame->frame()->ch_layout.nb_channels);
     }
     void addError() override {
@@ -85,59 +90,6 @@ public:
     }
     void close() override {
         _output->close();
-    }
-};
-
-class AudioSplitter : public Transformer<Frame> {
-    RefPtr<Consumer<Frame>> _output;
-public:
-    AudioSplitter(RefPtr<Consumer<Frame>> output, AVSampleFormat format, AVChannelLayout ch_layout, int32_t frame_size, int32_t sample_rate) {
-        _output = build(output, format, ch_layout, frame_size, sample_rate);
-    }
-    AudioSplitter(RefPtr<Consumer<Frame>> output, AVCodecContext* context) {
-        _output = build(output, context->sample_fmt, context->ch_layout, context->frame_size, context->sample_rate);
-    }
-    void add(RefPtr<Frame> frame) override {
-        _output->add(frame);
-    }
-    void addError() override {
-        _output->addError();
-    }
-    void close() override {
-        _output->close();
-    }
-    static RefPtr<Transformer<Frame>> from(RefPtr<Consumer<Frame>> output, AVCodecContext* context) {
-        return build(output, context->sample_fmt, context->ch_layout, context->frame_size, context->sample_rate);
-    }
-    static RefPtr<Transformer<Frame>> build(RefPtr<Consumer<Frame>> output, AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples, int32_t sample_rate) {
-        switch (format) {
-        case AV_SAMPLE_FMT_U8:
-            return new AudioSplitterT<uint8_t, false>(output, format, ch_layout, nb_samples, sample_rate);
-        case AV_SAMPLE_FMT_S16:
-            return new AudioSplitterT<int16_t, false>(output, format, ch_layout, nb_samples, sample_rate);
-        case AV_SAMPLE_FMT_S32:
-            return new AudioSplitterT<int32_t, false>(output, format, ch_layout, nb_samples, sample_rate);
-        case AV_SAMPLE_FMT_FLT:
-            return new AudioSplitterT<float, false>(output, format, ch_layout, nb_samples, sample_rate);
-        case AV_SAMPLE_FMT_DBL:
-            return new AudioSplitterT<double, false>(output, format, ch_layout, nb_samples, sample_rate);
-        case AV_SAMPLE_FMT_U8P:
-            return new AudioSplitterT<uint8_t, true>(output, format, ch_layout, nb_samples, sample_rate);
-        case AV_SAMPLE_FMT_S16P:
-            return new AudioSplitterT<int16_t, true>(output, format, ch_layout, nb_samples, sample_rate);
-        case AV_SAMPLE_FMT_S32P:
-            return new AudioSplitterT<int32_t, true>(output, format, ch_layout, nb_samples, sample_rate);
-        case AV_SAMPLE_FMT_FLTP:
-            return new AudioSplitterT<float, true>(output, format, ch_layout, nb_samples, sample_rate);
-        case AV_SAMPLE_FMT_DBLP:
-            return new AudioSplitterT<double, true>(output, format, ch_layout, nb_samples, sample_rate);
-        case AV_SAMPLE_FMT_S64:
-            return new AudioSplitterT<int64_t, false>(output, format, ch_layout, nb_samples, sample_rate);
-        case AV_SAMPLE_FMT_S64P:
-            return new AudioSplitterT<int64_t, true>(output, format, ch_layout, nb_samples, sample_rate);
-        default:
-            return nullptr;
-        }
     }
 };
 
@@ -170,7 +122,7 @@ int main() {
             audioTarget->context()->sample_fmt,
             audioTarget->context()->ch_layout,
             audioTarget->context()->sample_rate
-        )->transform(AudioSplitter::from, audioTarget->context());
+        )->transform<AudioSplitter>(audioTarget->context()->frame_size);
         videoSource = videoSource->convert<ffmpeg::Frame>([](RefPtr<ffmpeg::Frame> frame) {
             frame->frame()->pts /= 3600;
             printf("video pts: %lld\n", frame->frame()->pts);
