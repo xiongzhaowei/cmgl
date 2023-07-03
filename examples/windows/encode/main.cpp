@@ -27,12 +27,12 @@ class AudioSplitterT : public Transformer<Frame> {
     AVSampleFormat _format;
     AVChannelLayout _layout;
     RefPtr<Frame> _frame;
-    int32_t _sampleCount;
+    int32_t _sample_count;
     int32_t _sampleTotal;
-    int32_t _sampleRate;
+    int32_t _sample_rate;
     int64_t _timestamp;
 public:
-    AudioSplitterT(RefPtr<Consumer<Frame>> output, AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples, int32_t sample_rate) : _output(output), _format(format), _layout(ch_layout), _sampleTotal(nb_samples), _sampleRate(sample_rate), _timestamp(0) {
+    AudioSplitterT(RefPtr<Consumer<Frame>> output, AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples, int32_t sample_rate) : _output(output), _format(format), _layout(ch_layout), _sampleTotal(nb_samples), _sample_rate(sample_rate), _timestamp(0) {
         assert(output != nullptr);
         assert(format != AV_SAMPLE_FMT_NONE);
         assert(ch_layout.nb_channels > 0);
@@ -40,11 +40,11 @@ public:
     }
     void copyData(uint8_t** data, int32_t offset, int32_t count, int32_t nb_channels) {
         if (_frame == nullptr) {
-            _frame = Frame::alloc(_format, _layout, _sampleTotal, _sampleRate);
-            _sampleCount = 0;
+            _frame = Frame::alloc(_format, _layout, _sampleTotal, _sample_rate);
+            _sample_count = 0;
         }
-        if (_sampleCount + count >= _sampleTotal) {
-            int32_t copyCount = _sampleTotal - _sampleCount;
+        if (_sample_count + count >= _sampleTotal) {
+            int32_t copyCount = _sampleTotal - _sample_count;
             copy(data, offset, copyCount, nb_channels);
             offset += copyCount;
             count -= copyCount;
@@ -63,13 +63,13 @@ public:
     void copy(uint8_t** data, int32_t offset, int32_t count, int32_t nb_channels) {
         if (planar) {
             for (int channel = 0; channel < nb_channels; channel++) {
-                memcpy(_frame->frame()->extended_data[channel] + _sampleCount * sizeof(T), data[channel] + offset * sizeof(T), count * sizeof(T));
+                memcpy(_frame->frame()->extended_data[channel] + _sample_count * sizeof(T), data[channel] + offset * sizeof(T), count * sizeof(T));
             }
         } else {
-            memcpy(_frame->frame()->extended_data[0] + _sampleCount * nb_channels * sizeof(T), data[0] + offset * nb_channels * sizeof(T), count * nb_channels * sizeof(T));
+            memcpy(_frame->frame()->extended_data[0] + _sample_count * nb_channels * sizeof(T), data[0] + offset * nb_channels * sizeof(T), count * nb_channels * sizeof(T));
         }
         _timestamp += count;
-        _sampleCount += count;
+        _sample_count += count;
     }
     void add(RefPtr<Frame> frame) override {
         if (frame == nullptr) return;
@@ -105,6 +105,9 @@ public:
     }
     void close() override {
         _output->close();
+    }
+    static RefPtr<Transformer<Frame>> from(RefPtr<Consumer<Frame>> output, AVCodecContext* context) {
+        return build(output, context->sample_fmt, context->ch_layout, context->frame_size, context->sample_rate);
     }
     static RefPtr<Transformer<Frame>> build(RefPtr<Consumer<Frame>> output, AVSampleFormat format, AVChannelLayout ch_layout, int32_t nb_samples, int32_t sample_rate) {
         switch (format) {
@@ -150,45 +153,31 @@ int main() {
 //) {
     RefPtr<Thread> thread = new Thread;
     std::string url = wcstombs(L"D:\\迅雷下载\\Guardian Of The Galaxy Volume 3 (2023) ENG HDTC 1080p x264 AAC - HushRips.mp4", CP_UTF8);
-    std::string output = wcstombs(L"D:\\迅雷下载\\test.mpg", CP_UTF8);
+    std::string output = wcstombs(L"D:\\迅雷下载\\test.asf", CP_UTF8);
 
-    RefPtr<ffmpeg::MovieSource> source = new ffmpeg::MovieSource(thread);
-    RefPtr<ffmpeg::FileTarget> target = ffmpeg::FileTarget::from(nullptr, output.c_str());
+    RefPtr<ffmpeg::MovieSource> source = new ffmpeg::MovieSource();
+    RefPtr<ffmpeg::MovieTarget> target = MovieTarget::from(nullptr, output.c_str());
 
-    RefPtr<ffmpeg::FileTargetStream> audioTarget = ffmpeg::FileTargetStream::audio(target);
-    RefPtr<ffmpeg::FileTargetStream> videoTarget = ffmpeg::FileTargetStream::video(target);
-
-    audioTarget->open(AV_SAMPLE_FMT_FLTP, 160616, 44100, { AV_CHANNEL_ORDER_NATIVE, 2, AV_CH_LAYOUT_STEREO });
-    videoTarget->open(AV_PIX_FMT_YUV420P, 4000000, 25, 1920, 1080, 25, 0);
+    RefPtr<ffmpeg::MovieEncoder> audioTarget = target->audio(160616, AV_SAMPLE_FMT_FLTP, 44100, { AV_CHANNEL_ORDER_NATIVE, 2, AV_CH_LAYOUT_STEREO });
+    RefPtr<ffmpeg::MovieEncoder> videoTarget = target->video(4000000, AV_PIX_FMT_YUV420P, 25, 1920, 1080, 25, 0);
 
     target->openFile(output);
     target->writeHeader();
 
     if (source->open(url)) {
-        RefPtr<Stream<Frame>> videoSource = source->stream(AVMEDIA_TYPE_VIDEO);
+        RefPtr<Stream<Frame>> videoSource = source->stream(AVMEDIA_TYPE_VIDEO)->convert(videoTarget->context()->pix_fmt);
         RefPtr<Stream<Frame>> audioSource = source->stream(AVMEDIA_TYPE_AUDIO)->convert(
-            audioTarget->context()->ch_layout,
             audioTarget->context()->sample_fmt,
+            audioTarget->context()->ch_layout,
             audioTarget->context()->sample_rate
-        )->transform<AudioSplitter>(audioTarget->context());
-
-        //RefPtr<ffmpeg::FileSourceStream> videoSource = ffmpeg::FileSourceStream::video(source);
-        //RefPtr<ffmpeg::FileSourceStream> audioSource = ffmpeg::FileSourceStream::audio(source);
-        //source->listen(audioSource);
-        //source->listen(videoSource);
-
-        //RefPtr<ffmpeg::Stream<ffmpeg::Frame>> audioFilter = audioSource->convert<ffmpeg::Frame>([](RefPtr<ffmpeg::Frame> frame) {
-        //    printf("audio pts: %lld\n", frame->frame()->pts);
-        //    return frame;
-        //});
-        audioSource->listen(audioTarget);
-
-        RefPtr<ffmpeg::Stream<ffmpeg::Frame>> videoFilter = videoSource->convert<ffmpeg::Frame>([](RefPtr<ffmpeg::Frame> frame) {
+        )->transform(AudioSplitter::from, audioTarget->context());
+        videoSource = videoSource->convert<ffmpeg::Frame>([](RefPtr<ffmpeg::Frame> frame) {
             frame->frame()->pts /= 3600;
             printf("video pts: %lld\n", frame->frame()->pts);
             return frame;
         });
-        videoFilter->listen(videoTarget);
+        audioSource->listen(audioTarget);
+        videoSource->listen(videoTarget);
 
         for (int i = 0; i < 1000; i++) {
             source->read();

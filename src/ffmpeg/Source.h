@@ -19,17 +19,14 @@ public:
 class MovieSourceStream;
 
 class MovieSource : public Stream<Packet> {
-    friend class FileSourceStream;
     AVFormatContext* _context = nullptr;
     RefPtr<Packet> _packet;
     RefPtr<StreamController<Packet>> _controller;
-    RefPtr<Thread> _thread;
 public:
-    MovieSource(Thread* thread);
+    MovieSource();
     bool open(const std::string& filename);
     void close();
 
-    RefPtr<Thread> thread() const;
     AVFormatContext* context() const;
     AVStream* audio() const;
     AVStream* video() const;
@@ -73,53 +70,54 @@ public:
     AVStream* stream() const;
     AVCodecContext* context() const;
     RefPtr<MovieDecoder> decoder() const;
-    RefPtr<Stream<Frame>> convert(AVChannelLayout ch_layout, AVSampleFormat sample_fmt, int32_t sample_rate);
+    RefPtr<Stream<Frame>> convert(AVSampleFormat sample_fmt, AVChannelLayout ch_layout, int32_t sample_rate);
+    RefPtr<Stream<Frame>> convert(AVPixelFormat format);
 
     bool available() const;
 
-    static MovieSourceStream* from(AVStream* stream, Thread* thread);
-    static MovieSourceStream* audio(MovieSource* source);
-    static MovieSourceStream* video(MovieSource* source);
+    static MovieSourceStream* from(AVStream* stream);
 };
 
-class FileTarget : public Consumer<Packet> {
-    friend class FileTargetStream;
-    friend class StreamEncoder;
-    AVFormatContext* _context;
-    FileTarget(AVFormatContext* context);
+class MovieEncoder : public Transformer<Frame, Packet> {
+    RefPtr<Consumer<Packet>> _output;
+    RefPtr<Packet> _packet;
+    AVStream* _stream;
+    AVCodecContext* _context;
+    MovieEncoder(RefPtr<Consumer<Packet>> output, AVStream* stream, AVCodecContext* context);
 public:
-    ~FileTarget();
+    ~MovieEncoder();
+
+    void add(RefPtr<Frame> frame) override;
+    void addError() override;
+    void close() override;
+
+    AVStream* stream() const;
+    AVCodecContext* context() const;
+
+    static RefPtr<MovieEncoder> audio(RefPtr<Consumer<Packet>> output, const AVCodec* codec, AVStream* stream, int32_t bit_rate, AVSampleFormat format, int32_t sample_rate, AVChannelLayout ch_layout, AVDictionary* options = nullptr);
+    static RefPtr<MovieEncoder> video(RefPtr<Consumer<Packet>> output, const AVCodec* codec, AVStream* stream, int32_t bit_rate, AVPixelFormat format, int32_t frame_rate, int32_t width, int32_t height, int32_t gop_size, int32_t max_b_frames, AVDictionary* options = nullptr);
+};
+
+class MovieTarget : public Consumer<Packet> {
+    AVFormatContext* _context;
+    MovieTarget(AVFormatContext* context);
+public:
+    ~MovieTarget();
 
     void add(RefPtr<Packet> packet) override;
     void addError() override;
     void close() override;
+
+    AVFormatContext* context() const;
+    RefPtr<MovieEncoder> audio(int32_t bit_rate, AVSampleFormat format, int32_t sample_rate, AVChannelLayout ch_layout, AVDictionary* options = nullptr);
+    RefPtr<MovieEncoder> video(int32_t bit_rate, AVPixelFormat format, int32_t frame_rate, int32_t width, int32_t height, int32_t gop_size, int32_t max_b_frames, AVDictionary* options = nullptr);
 
     bool openFile(const std::string& filename);
     bool closeFile();
     bool writeHeader(AVDictionary* options = nullptr);
     bool writeTrailer();
 
-    static FileTarget* from(const char* format, const char* filename = nullptr);
-};
-
-class FileTargetStream : public Transformer<Frame, Packet> {
-    RefPtr<FileTarget> _owner;
-    AVStream* _stream;
-    AVCodecContext* _context;
-    FileTargetStream(FileTarget* owner, AVStream* stream);
-public:
-    void add(RefPtr<Frame> frame) override;
-    void addError() override;
-    void close() override;
-
-    bool open(AVSampleFormat format, int32_t bit_rate, int32_t sample_rate, const AVChannelLayout& ch_layout, AVDictionary* options = nullptr);
-    bool open(AVPixelFormat format, int32_t bit_rate, int32_t frame_rate, int32_t width, int32_t height, int32_t gop_size, int32_t max_b_frames, AVDictionary* options = nullptr);
-
-    AVCodecContext* context() const;
-
-    static FileTargetStream* from(FileTarget* target, const AVCodec* codec);
-    static FileTargetStream* audio(FileTarget* target);
-    static FileTargetStream* video(FileTarget* target);
+    static MovieTarget* from(const char* format, const char* filename = nullptr);
 };
 
 OMP_FFMPEG_NAMESPACE_END

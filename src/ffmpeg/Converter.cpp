@@ -64,25 +64,23 @@ VideoConverter::~VideoConverter() {
 RefPtr<Frame> VideoConverter::convert(RefPtr<Frame> input) {
     RefPtr<Frame> output = Frame::alloc(_format, _width, _height);
     if (nullptr == output) return nullptr;
-    output->frame()->best_effort_timestamp = input->frame()->best_effort_timestamp;
-    output->frame()->pts = input->frame()->pts;
-    output->frame()->pkt_dts = input->frame()->pkt_dts;
-    output->frame()->pkt_pos = input->frame()->pkt_pos;
-    output->frame()->pkt_duration = input->frame()->pkt_pos;
 
     if (sws_scale(_context, (const uint8_t* const*)input->frame()->data, input->frame()->linesize, 0, _height, output->frame()->data, output->frame()->linesize) > 0) {
+        output->frame()->best_effort_timestamp = input->frame()->best_effort_timestamp;
+        output->frame()->pts = input->frame()->pts;
+        output->frame()->pkt_dts = input->frame()->pkt_dts;
+        output->frame()->pkt_pos = input->frame()->pkt_pos;
+        output->frame()->pkt_duration = input->frame()->pkt_pos;
         return output;
     }
 
     return nullptr;
 }
 
-VideoConverter* VideoConverter::create(AVStream* stream, AVPixelFormat format) {
-    if (!stream) return nullptr;
-    if (!stream->codecpar) return nullptr;
-    if (stream->codecpar->codec_type != AVMEDIA_TYPE_VIDEO) return nullptr;
+RefPtr<VideoConverter> VideoConverter::create(AVCodecParameters* codecpar, AVPixelFormat format) {
+    if (codecpar == nullptr) return nullptr;
+    if (codecpar->codec_type != AVMEDIA_TYPE_VIDEO) return nullptr;
 
-    AVCodecParameters* codecpar = stream->codecpar;
     int width = codecpar->width;
     int height = codecpar->height;
     SwsContext* context = sws_getContext(

@@ -21,7 +21,7 @@ void Packet::reset() {
 	av_packet_unref(_packet);
 }
 
-MovieSource::MovieSource(Thread* thread) : _packet(new Packet), _thread(thread), _controller(StreamController<Packet>::sync([thread = RefPtr<Thread>(thread)]() { thread->runOnThread([]() {}); }, [thread = RefPtr<Thread>(thread)]() { thread->runOnThread([]() {}); })) {
+MovieSource::MovieSource() : _packet(new Packet), _controller(StreamController<Packet>::sync()) {
 }
 
 bool MovieSource::open(const std::string& filename) {
@@ -39,10 +39,6 @@ bool MovieSource::open(const std::string& filename) {
 
 void MovieSource::close() {
 	avformat_close_input(&_context);
-}
-
-RefPtr<Thread> MovieSource::thread() const {
-	return _thread;
 }
 
 AVFormatContext* MovieSource::context() const {
@@ -73,7 +69,7 @@ RefPtr<MovieSourceStream> MovieSource::stream(AVMediaType codecType) {
 	for (uint32_t i = 0; i < _context->nb_streams; i++) {
 		AVStream* stream = _context->streams[i];
 		if (stream && stream->codecpar->codec_type == codecType) {
-			RefPtr<MovieSourceStream> source = MovieSourceStream::from(stream, thread());
+			RefPtr<MovieSourceStream> source = MovieSourceStream::from(stream);
 			listen(source->decoder());
 			return source;
 		}
@@ -178,15 +174,21 @@ RefPtr<MovieDecoder> MovieSourceStream::decoder() const {
 	return _decoder;
 }
 
-RefPtr<Stream<Frame>> MovieSourceStream::convert(AVChannelLayout ch_layout, AVSampleFormat sample_fmt, int32_t sample_rate) {
+RefPtr<Stream<Frame>> MovieSourceStream::convert(AVSampleFormat sample_fmt, AVChannelLayout ch_layout, int32_t sample_rate) {
+	assert(stream()->codecpar->codec_type == AVMEDIA_TYPE_AUDIO);
 	return Stream<Frame>::convert(AudioConverter::from(ch_layout, sample_fmt, sample_rate, _decoder->context()->ch_layout, _decoder->context()->sample_fmt, _decoder->context()->sample_rate));
+}
+
+RefPtr<Stream<Frame>> MovieSourceStream::convert(AVPixelFormat format) {
+	assert(stream()->codecpar->codec_type == AVMEDIA_TYPE_VIDEO);
+	return Stream<Frame>::convert(VideoConverter::create(stream()->codecpar, format));
 }
 
 bool MovieSourceStream::available() const {
 	return _decoder->available();
 }
 
-MovieSourceStream* MovieSourceStream::from(AVStream* stream, Thread* thread) {
+MovieSourceStream* MovieSourceStream::from(AVStream* stream) {
 	const AVCodec* codec = avcodec_find_decoder(stream->codecpar->codec_id);
 	if (!codec) return nullptr;
 
@@ -194,109 +196,20 @@ MovieSourceStream* MovieSourceStream::from(AVStream* stream, Thread* thread) {
 	avcodec_parameters_to_context(context, stream->codecpar);
 	if (avcodec_open2(context, codec, NULL) < 0) return nullptr;
 
-	std::function<void()> onPause = []() {
-	};
-	std::function<void()> onResume = []() {
-	};
-	RefPtr<StreamController<Frame>> controller = StreamController<Frame>::sync(onPause, onResume);
+	RefPtr<StreamController<Frame>> controller = StreamController<Frame>::sync();
 	RefPtr<MovieDecoder> decoder = MovieDecoder::from(controller, stream);
 	return new MovieSourceStream(controller, decoder);
 }
 
-MovieSourceStream* MovieSourceStream::audio(MovieSource* source) {
-	return from(source->audio(), source->thread());
-}
-
-MovieSourceStream* MovieSourceStream::video(MovieSource* source) {
-	return from(source->video(), source->thread());
-}
-
-FileTarget* FileTarget::from(const char* format, const char* filename) {
-	AVFormatContext* context = nullptr;
-	if (!Error::verify(avformat_alloc_output_context2(&context, NULL, format, filename), __FUNCSIG__, __LINE__)) {
-		return nullptr;
-	}
-	if (!context) return nullptr;
-
-	return new FileTarget(context);
-}
-
-FileTarget::FileTarget(AVFormatContext* context) : _context(context) {
-}
-
-FileTarget::~FileTarget() {
-	if (_context) {
-		avformat_free_context(_context);
-		_context = nullptr;
-	}
-}
-
-bool FileTarget::openFile(const std::string& filename) {
-	if (_context->oformat->flags & AVFMT_NOFILE) return true;
-	return Error::verify(avio_open(&_context->pb, filename.c_str(), AVIO_FLAG_WRITE), __FUNCSIG__, __LINE__);
-}
-
-bool FileTarget::closeFile() {
-	if (_context->oformat->flags & AVFMT_NOFILE) return true;
-	return Error::verify(avio_closep(&_context->pb), __FUNCSIG__, __LINE__);
-}
-
-bool FileTarget::writeHeader(AVDictionary* options) {
-	return Error::verify(avformat_write_header(_context, &options), __FUNCSIG__, __LINE__);
-}
-
-bool FileTarget::writeTrailer() {
-	return Error::verify(av_write_trailer(_context), __FUNCSIG__, __LINE__);
-}
-
-void FileTarget::close() {
-}
-
-void FileTarget::add(RefPtr<Packet> packet) {
-	int error = av_interleaved_write_frame(_context, packet->packet());
-
-	bool result = Error::verify(error, __FUNCSIG__, __LINE__);
-	assert(result);
-}
-
-void FileTarget::addError() {
+MovieEncoder::MovieEncoder(RefPtr<Consumer<Packet>> output, AVStream* stream, AVCodecContext* context) : _output(output), _stream(stream), _context(context), _packet(new Packet) {
 
 }
 
-FileTargetStream::FileTargetStream(FileTarget* owner, AVStream* stream) : _owner(owner), _stream(stream), _context(nullptr) {
-
+MovieEncoder::~MovieEncoder() {
+	avcodec_free_context(&_context);
 }
 
-FileTargetStream* FileTargetStream::from(FileTarget* target, const AVCodec* codec) {
-	AVStream* stream = avformat_new_stream(target->_context, codec);
-	if (stream == nullptr) return nullptr;
-
-	return new FileTargetStream(target, stream);
-}
-
-FileTargetStream* FileTargetStream::audio(FileTarget* target) {
-	if (target == nullptr) return nullptr;
-	if (target->_context == nullptr) return nullptr;
-	if (target->_context->oformat == nullptr) return nullptr;
-
-	const AVCodec* codec = avcodec_find_encoder(target->_context->oformat->audio_codec);
-	if (codec == nullptr) return nullptr;
-
-	return from(target, codec);
-}
-
-FileTargetStream* FileTargetStream::video(FileTarget* target) {
-	if (target == nullptr) return nullptr;
-	if (target->_context == nullptr) return nullptr;
-	if (target->_context->oformat == nullptr) return nullptr;
-
-	const AVCodec* codec = avcodec_find_encoder(target->_context->oformat->video_codec);
-	if (codec == nullptr) return nullptr;
-
-	return from(target, codec);
-}
-
-void FileTargetStream::add(RefPtr<Frame> frame) {
+void MovieEncoder::add(RefPtr<Frame> frame) {
 	if (frame == nullptr) return;
 	if (frame->frame() == nullptr) return;
 
@@ -305,36 +218,40 @@ void FileTargetStream::add(RefPtr<Frame> frame) {
 		return;
 	}
 
-	RefPtr<Packet> packet = new Packet;
 	while (true) {
-		int error = avcodec_receive_packet(_context, packet->packet());
+		int error = avcodec_receive_packet(_context, _packet->packet());
 		if (error < 0) {
 			if (error != AVERROR(EAGAIN) && error != AVERROR_EOF) {
 				Error::report(error, __FUNCSIG__, __LINE__);
 			}
+			addError();
 			break;
 		}
-		av_packet_rescale_ts(packet->packet(), _context->time_base, _stream->time_base);
-		packet->packet()->stream_index = _stream->index;
-		_owner->add(packet);
-		packet->reset();
+		av_packet_rescale_ts(_packet->packet(), context()->time_base, _stream->time_base);
+		_packet->packet()->stream_index = _stream->index;
+		_output->add(_packet);
+		_packet->reset();
 	}
 }
 
-void FileTargetStream::addError() {
-
+void MovieEncoder::addError() {
+	_output->addError();
 }
 
-void FileTargetStream::close() {
-
+void MovieEncoder::close() {
+	_output->close();
 }
 
-bool FileTargetStream::open(AVSampleFormat format, int32_t bit_rate, int32_t sample_rate, const AVChannelLayout& ch_layout, AVDictionary* options) {
-	assert(_context == nullptr);
+AVStream* MovieEncoder::stream() const {
+	return _stream;
+}
 
-	const AVCodec* codec = avcodec_find_encoder(_owner->_context->oformat->audio_codec);
-	if (codec == nullptr) return nullptr;
+AVCodecContext* MovieEncoder::context() const {
+	return _context;
+}
 
+RefPtr<MovieEncoder> MovieEncoder::audio(RefPtr<Consumer<Packet>> output, const AVCodec* codec, AVStream* stream, int32_t bit_rate, AVSampleFormat format, int32_t sample_rate, AVChannelLayout ch_layout, AVDictionary* options) {
+	if (nullptr == stream || nullptr == stream->codecpar) return nullptr;
 	assert(codec->type == AVMEDIA_TYPE_AUDIO);
 
 	AVCodecContext* context = avcodec_alloc_context3(codec);
@@ -366,23 +283,17 @@ bool FileTargetStream::open(AVSampleFormat format, int32_t bit_rate, int32_t sam
 			context->sample_rate = sample_rate;
 		}
 		if (Error::verify(avcodec_open2(context, codec, &options), __FUNCSIG__, __LINE__)) {
-			if (Error::verify(avcodec_parameters_from_context(_stream->codecpar, context), __FUNCSIG__, __LINE__)) {
-				_context = context;
-				return true;
+			if (Error::verify(avcodec_parameters_from_context(stream->codecpar, context), __FUNCSIG__, __LINE__)) {
+				return new MovieEncoder(output, stream, context);
 			}
 		}
-
 		avcodec_free_context(&context);
 	}
-	return false;
+	return nullptr;
 }
 
-bool FileTargetStream::open(AVPixelFormat format, int32_t bit_rate, int32_t frame_rate, int32_t width, int32_t height, int32_t gop_size, int32_t max_b_frames, AVDictionary* options) {
-	assert(_context == nullptr);
-
-	const AVCodec* codec = avcodec_find_encoder(_owner->_context->oformat->video_codec);
-	if (codec == nullptr) return nullptr;
-
+RefPtr<MovieEncoder> MovieEncoder::video(RefPtr<Consumer<Packet>> output, const AVCodec* codec, AVStream* stream, int32_t bit_rate, AVPixelFormat format, int32_t frame_rate, int32_t width, int32_t height, int32_t gop_size, int32_t max_b_frames, AVDictionary* options) {
+	if (nullptr == stream || nullptr == stream->codecpar) return nullptr;
 	assert(codec->type == AVMEDIA_TYPE_VIDEO);
 
 	AVCodecContext* context = avcodec_alloc_context3(codec);
@@ -418,17 +329,91 @@ bool FileTargetStream::open(AVPixelFormat format, int32_t bit_rate, int32_t fram
 		context->time_base = AVRational{ context->framerate.den, context->framerate.num };
 
 		if (Error::verify(avcodec_open2(context, codec, &options), __FUNCSIG__, __LINE__)) {
-			if (Error::verify(avcodec_parameters_from_context(_stream->codecpar, context), __FUNCSIG__, __LINE__)) {
-				_context = context;
-				return true;
+			if (Error::verify(avcodec_parameters_from_context(stream->codecpar, context), __FUNCSIG__, __LINE__)) {
+				return new MovieEncoder(output, stream, context);
 			}
 		}
-
 		avcodec_free_context(&context);
 	}
-	return false;
+	return nullptr;
 }
 
-AVCodecContext* FileTargetStream::context() const {
+MovieTarget::MovieTarget(AVFormatContext* context) : _context(context) {
+
+}
+
+MovieTarget::~MovieTarget() {
+	if (_context) {
+		avformat_free_context(_context);
+		_context = nullptr;
+	}
+}
+
+void MovieTarget::add(RefPtr<Packet> packet) {
+	bool result = Error::verify(av_interleaved_write_frame(_context, packet->packet()), __FUNCSIG__, __LINE__);
+	assert(result);
+}
+
+void MovieTarget::addError() {
+
+}
+
+void MovieTarget::close() {
+
+}
+
+AVFormatContext* MovieTarget::context() const {
 	return _context;
+}
+
+RefPtr<MovieEncoder> MovieTarget::audio(int32_t bit_rate, AVSampleFormat format, int32_t sample_rate, AVChannelLayout ch_layout, AVDictionary* options) {
+	if (_context->oformat == nullptr) return nullptr;
+
+	const AVCodec* codec = avcodec_find_encoder(_context->oformat->audio_codec);
+	if (codec == nullptr) return nullptr;
+
+	AVStream* stream = avformat_new_stream(_context, codec);
+	if (stream == nullptr) return nullptr;
+
+	return MovieEncoder::audio(this, codec, stream, bit_rate, format, sample_rate, ch_layout, options);
+}
+
+RefPtr<MovieEncoder> MovieTarget::video(int32_t bit_rate, AVPixelFormat format, int32_t frame_rate, int32_t width, int32_t height, int32_t gop_size, int32_t max_b_frames, AVDictionary* options) {
+	if (_context->oformat == nullptr) return nullptr;
+
+	const AVCodec* codec = avcodec_find_encoder(_context->oformat->video_codec);
+	if (codec == nullptr) return nullptr;
+
+	AVStream* stream = avformat_new_stream(_context, codec);
+	if (stream == nullptr) return nullptr;
+
+	return MovieEncoder::video(this, codec, stream, bit_rate, format, frame_rate, width, height, gop_size, max_b_frames, options);
+}
+
+bool MovieTarget::openFile(const std::string& filename) {
+	if (_context->oformat->flags & AVFMT_NOFILE) return true;
+	return Error::verify(avio_open(&_context->pb, filename.c_str(), AVIO_FLAG_WRITE), __FUNCSIG__, __LINE__);
+}
+
+bool MovieTarget::closeFile() {
+	if (_context->oformat->flags & AVFMT_NOFILE) return true;
+	return Error::verify(avio_closep(&_context->pb), __FUNCSIG__, __LINE__);
+}
+
+bool MovieTarget::writeHeader(AVDictionary* options) {
+	return Error::verify(avformat_write_header(_context, &options), __FUNCSIG__, __LINE__);
+}
+
+bool MovieTarget::writeTrailer() {
+	return Error::verify(av_write_trailer(_context), __FUNCSIG__, __LINE__);
+}
+
+MovieTarget* MovieTarget::from(const char* format, const char* filename) {
+	AVFormatContext* context = nullptr;
+	if (!Error::verify(avformat_alloc_output_context2(&context, NULL, format, filename), __FUNCSIG__, __LINE__)) {
+		return nullptr;
+	}
+	if (!context) return nullptr;
+
+	return new MovieTarget(context);
 }

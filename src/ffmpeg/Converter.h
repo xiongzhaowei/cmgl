@@ -49,7 +49,7 @@ public:
 
     RefPtr<Frame> convert(RefPtr<Frame> input) override;
 
-    static VideoConverter* create(AVStream* stream, AVPixelFormat format);
+    static RefPtr<VideoConverter> create(AVCodecParameters* codecpar, AVPixelFormat format);
 };
 
 OMP_FFMPEG_NAMESPACE_END
