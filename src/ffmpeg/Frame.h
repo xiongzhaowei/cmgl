@@ -6,6 +6,16 @@
 
 OMP_FFMPEG_NAMESPACE_BEGIN
 
+class Packet : public Object {
+    AVPacket* _packet;
+public:
+    Packet();
+    ~Packet();
+
+    AVPacket* packet() const;
+    void reset();
+};
+
 class Frame : public Object {
     AVFrame* _frame;
     Frame();

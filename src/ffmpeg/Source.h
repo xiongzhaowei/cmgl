@@ -6,22 +6,12 @@
 
 OMP_FFMPEG_NAMESPACE_BEGIN
 
-class Packet : public Object {
-    AVPacket* _packet;
-public:
-    Packet();
-    ~Packet();
-
-    AVPacket* packet() const;
-    void reset();
-};
-
 class MovieSourceStream;
 
 class MovieSource : public Stream<Packet> {
-    AVFormatContext* _context = nullptr;
-    RefPtr<Packet> _packet;
     RefPtr<StreamController<Packet>> _controller;
+    RefPtr<Packet> _packet;
+    AVFormatContext* _context = nullptr;
 public:
     MovieSource();
     bool open(const std::string& filename);
@@ -41,8 +31,8 @@ class MovieDecoder : public StreamConsumer<Packet> {
     RefPtr<Frame> _frame;
     AVStream* _stream;
     AVCodecContext* _context;
-public:
     MovieDecoder(RefPtr<StreamConsumer<Frame>> output, AVStream* stream, AVCodecContext* context);
+public:
     ~MovieDecoder();
 
     typedef Frame Target;
@@ -59,16 +49,11 @@ public:
 };
 
 class MovieSourceStream : public Stream<Frame> {
-    std::list<RefPtr<StreamConsumer<Frame>>> _consumers;
+    RefPtr<StreamController<Frame>> _controller;
     WeakPtr<MovieDecoder> _decoder;
-    MovieSourceStream(RefPtr<MovieDecoder> decoder);
+    MovieSourceStream(RefPtr<StreamController<Frame>> controller, RefPtr<MovieDecoder> decoder);
 public:
     RefPtr<StreamSubscription> listen(RefPtr<StreamConsumer<Frame>> consumer) override;
-
-    void handleFrame(RefPtr<Frame> frame);
-    void handleError();
-    void handleClose();
-    void handleCancel(RefPtr<StreamConsumer<Frame>> consumer);
 
     AVStream* stream() const;
     AVCodecContext* context() const;

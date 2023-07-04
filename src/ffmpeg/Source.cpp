@@ -6,21 +6,6 @@
 
 OMP_FFMPEG_USING_NAMESPACE
 
-Packet::Packet() : _packet(av_packet_alloc()) {
-}
-
-Packet::~Packet() {
-	av_packet_free(&_packet);
-}
-
-AVPacket* Packet::packet() const {
-	return _packet;
-}
-
-void Packet::reset() {
-	av_packet_unref(_packet);
-}
-
 MovieSource::MovieSource() : _packet(new Packet), _controller(StreamController<Packet>::sync()) {
 }
 
@@ -132,48 +117,12 @@ RefPtr<MovieDecoder> MovieDecoder::from(RefPtr<StreamConsumer<Frame>> output, AV
 	return new MovieDecoder(output, stream, context);
 }
 
-MovieSourceStream::MovieSourceStream(RefPtr<MovieDecoder> decoder) : _decoder(decoder) {
+MovieSourceStream::MovieSourceStream(RefPtr<StreamController<Frame>> controller, RefPtr<MovieDecoder> decoder) : _decoder(decoder), _controller(controller) {
 
 }
 
 RefPtr<StreamSubscription> MovieSourceStream::listen(RefPtr<StreamConsumer<Frame>> consumer) {
-	_consumers.push_back(consumer);
-	class _StreamSubscription : public StreamSubscription {
-		std::function<void()> _cancel;
-	public:
-		_StreamSubscription(std::function<void()> cancel) : _cancel(cancel) {}
-		void cancel() { _cancel(); }
-		void pause() {}
-		void resume() {}
-	};
-	return new _StreamSubscription(std::bind(&MovieSourceStream::handleCancel, this, consumer));
-}
-
-void MovieSourceStream::handleFrame(RefPtr<Frame> frame) {
-	for (RefPtr<StreamConsumer<Frame>> consumer : _consumers) {
-		consumer->add(frame);
-	}
-}
-
-void MovieSourceStream::handleError() {
-	for (RefPtr<StreamConsumer<Frame>> consumer : _consumers) {
-		consumer->addError();
-	}
-}
-
-void MovieSourceStream::handleClose() {
-	for (RefPtr<StreamConsumer<Frame>> consumer : _consumers) {
-		consumer->close();
-	}
-}
-
-void MovieSourceStream::handleCancel(RefPtr<StreamConsumer<Frame>> consumer) {
-	for (auto it = _consumers.begin(); it != _consumers.end(); it++) {
-		if (*it == consumer) {
-			_consumers.erase(it);
-			break;
-		}
-	}
+	return _controller->stream()->listen(consumer);
 }
 
 AVStream* MovieSourceStream::stream() const {
@@ -185,12 +134,7 @@ AVCodecContext* MovieSourceStream::context() const {
 }
 
 bool MovieSourceStream::available() const {
-	if (_consumers.empty()) return false;
-
-	for (RefPtr<StreamConsumer<Frame>> consumer : _consumers) {
-		if (!consumer->available()) return false;
-	}
-	return true;
+	return _controller->available();
 }
 
 RefPtr<Stream<Frame>> MovieSourceStream::convert(AVSampleFormat sample_fmt, AVChannelLayout ch_layout, int32_t sample_rate) {
@@ -211,17 +155,9 @@ RefPtr<MovieSourceStream> MovieSourceStream::from(RefPtr<MovieSource> source, AV
 	avcodec_parameters_to_context(context, stream->codecpar);
 	if (avcodec_open2(context, codec, NULL) < 0) return nullptr;
 
-	struct _MovieSourceStreamBinder : public StreamConsumer<Frame> {
-		RefPtr<MovieSourceStream> stream = nullptr;
-		void add(RefPtr<Frame> frame) override { stream->handleFrame(frame); }
-		void addError() override { stream->handleError(); }
-		void close() override { stream->handleClose(); }
-		bool available() const override { return stream->available(); }
-	};
-	RefPtr<_MovieSourceStreamBinder> binder = new _MovieSourceStreamBinder;
-	RefPtr<MovieDecoder> decoder = MovieDecoder::from(binder, stream);
-	RefPtr<MovieSourceStream> result = new MovieSourceStream(decoder);
-	binder->stream = result;
+	RefPtr<StreamController<Frame>> controller = StreamController<Frame>::sync();
+	RefPtr<MovieDecoder> decoder = MovieDecoder::from(controller, stream);
+	RefPtr<MovieSourceStream> result = new MovieSourceStream(controller, decoder);
 	source->listen(decoder);
 	return result;
 }

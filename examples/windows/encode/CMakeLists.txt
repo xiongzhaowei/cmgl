@@ -24,6 +24,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE "_HAS_EXCEPTIONS=0")
 target_compile_definitions(${PROJECT_NAME} PRIVATE "$<$<CONFIG:Debug>:_DEBUG>")
 target_link_libraries(${PROJECT_NAME} PRIVATE comctl32 gdiplus imm32 msimg32 shlwapi)
 target_link_libraries(${PROJECT_NAME} PRIVATE cmgl EGL GLESv2)
+target_link_options(${PROJECT_NAME} PRIVATE /SUBSYSTEM:CONSOLE)
 target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/src")
 add_dependencies(${PROJECT_NAME} EGL GLESv2)
 

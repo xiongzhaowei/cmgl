@@ -6,6 +6,21 @@
 
 OMP_FFMPEG_USING_NAMESPACE
 
+Packet::Packet() : _packet(av_packet_alloc()) {
+}
+
+Packet::~Packet() {
+	av_packet_free(&_packet);
+}
+
+AVPacket* Packet::packet() const {
+	return _packet;
+}
+
+void Packet::reset() {
+	av_packet_unref(_packet);
+}
+
 Frame::Frame() {
     _frame = av_frame_alloc();
 }

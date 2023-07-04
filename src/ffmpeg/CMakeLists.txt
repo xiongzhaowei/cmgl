@@ -6,7 +6,8 @@
     Frame.cpp
     Frame.h
     Stream.h
-    Stream.inl
+    AudioSplitter.cpp
+    AudioSplitter.h
     Decoder.cpp
     Decoder.h
     Converter.cpp
