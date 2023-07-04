@@ -100,8 +100,8 @@ public:
     bool available() const override;
 
     AVFormatContext* context() const;
-    RefPtr<MovieEncoder> audio(int32_t bit_rate, AVSampleFormat format, int32_t sample_rate, AVChannelLayout ch_layout, AVDictionary* options = nullptr);
-    RefPtr<MovieEncoder> video(int32_t bit_rate, AVPixelFormat format, int32_t frame_rate, int32_t width, int32_t height, int32_t gop_size, int32_t max_b_frames, AVDictionary* options = nullptr);
+    RefPtr<MovieEncoder> encoder(int32_t bit_rate, AVSampleFormat format, int32_t sample_rate, AVChannelLayout ch_layout, AVDictionary* options = nullptr);
+    RefPtr<MovieEncoder> encoder(int32_t bit_rate, AVPixelFormat format, int32_t frame_rate, int32_t width, int32_t height, int32_t gop_size, int32_t max_b_frames, AVDictionary* options = nullptr);
 
     bool openFile(const std::string& filename);
     bool closeFile();
@@ -109,6 +109,14 @@ public:
     bool writeTrailer();
 
     static MovieTarget* from(const char* format, const char* filename = nullptr);
+};
+
+class EmptyTarget : public StreamConsumer<Frame> {
+public:
+    void add(RefPtr<Frame> frame) override {}
+    void addError() override {}
+    void close() override {}
+    bool available() const override { return true; }
 };
 
 OMP_FFMPEG_NAMESPACE_END

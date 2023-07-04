@@ -21,4 +21,17 @@ private:
     std::list<RefPtr<Decoder>> _decoders;
 };
 
+class MovieThread : public Thread {
+public:
+    MovieThread() = default;
+
+    void run() override;
+    void add(RefPtr<MovieSource> movie);
+    void remove(RefPtr<MovieSource> movie);
+private:
+    bool available(std::list<RefPtr<MovieSource>>& list);
+
+    std::list<RefPtr<MovieSource>> _movies;
+};
+
 OMP_FFMPEG_NAMESPACE_END

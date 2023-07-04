@@ -27,7 +27,7 @@ extern "C" {
 #include "Stream.h"
 #include "AudioSplitter.h"
 #include "Decoder.h"
-#include "Thread.h"
 #include "Converter.h"
 #include "Renderer.h"
 #include "Source.h"
+#include "Thread.h"

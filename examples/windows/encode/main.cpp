@@ -31,7 +31,8 @@ int main() {
 //    _In_ wchar_t *command_line,
 //    _In_ int show_command
 //) {
-    RefPtr<Thread> thread = new Thread;
+    RefPtr<MovieThread> thread = new MovieThread;
+    thread->start();
     std::string url = wcstombs(L"D:\\迅雷下载\\Guardian Of The Galaxy Volume 3 (2023) ENG HDTC 1080p x264 AAC - HushRips.mp4", CP_UTF8);
     std::string output = wcstombs(L"D:\\迅雷下载\\test.asf", CP_UTF8);
 
@@ -56,16 +57,23 @@ int main() {
             printf("video pts: %lld\n", frame->frame()->pts);
             return frame;
         });
-        audioSource->listen(audioTarget);
-        videoSource->listen(videoTarget);
+        //audioSource->listen(audioTarget);
+        //videoSource->listen(videoTarget);
+        audioSource->listen(new EmptyTarget);
+        videoSource->listen(new EmptyTarget);
 
-        for (int i = 0; i < 1000; i++) {
-            if (source->available()) {
-                source->read();
-            }
-        }
+        //for (int i = 0; i < 1000; i++) {
+        //    if (source->available()) {
+        //        source->read();
+        //    }
+        //}
 
     }
+
+    thread->add(source);
+    Sleep(60000);
+    thread->remove(source);
+    Sleep(500);
 
     target->writeTrailer();
     target->closeFile();

@@ -124,12 +124,7 @@ public:
     }
     void cancel(RefPtr<StreamConsumer<T>> consumer) {
         _mutex.lock();
-        for (std::list<RefPtr<StreamConsumer<T>>>::iterator it = _consumers.begin(); it != _consumers.end(); it++) {
-            if (*it == consumer) {
-                _consumers.erase(it);
-                break;
-            }
-        }
+        _consumers.remove(consumer);
         _mutex.unlock();
     }
 };

@@ -335,7 +335,7 @@ AVFormatContext* MovieTarget::context() const {
 	return _context;
 }
 
-RefPtr<MovieEncoder> MovieTarget::audio(int32_t bit_rate, AVSampleFormat format, int32_t sample_rate, AVChannelLayout ch_layout, AVDictionary* options) {
+RefPtr<MovieEncoder> MovieTarget::encoder(int32_t bit_rate, AVSampleFormat format, int32_t sample_rate, AVChannelLayout ch_layout, AVDictionary* options) {
 	if (_context->oformat == nullptr) return nullptr;
 
 	const AVCodec* codec = avcodec_find_encoder(_context->oformat->audio_codec);
@@ -347,7 +347,7 @@ RefPtr<MovieEncoder> MovieTarget::audio(int32_t bit_rate, AVSampleFormat format,
 	return MovieEncoder::audio(this, codec, stream, bit_rate, format, sample_rate, ch_layout, options);
 }
 
-RefPtr<MovieEncoder> MovieTarget::video(int32_t bit_rate, AVPixelFormat format, int32_t frame_rate, int32_t width, int32_t height, int32_t gop_size, int32_t max_b_frames, AVDictionary* options) {
+RefPtr<MovieEncoder> MovieTarget::encoder(int32_t bit_rate, AVPixelFormat format, int32_t frame_rate, int32_t width, int32_t height, int32_t gop_size, int32_t max_b_frames, AVDictionary* options) {
 	if (_context->oformat == nullptr) return nullptr;
 
 	const AVCodec* codec = avcodec_find_encoder(_context->oformat->video_codec);
