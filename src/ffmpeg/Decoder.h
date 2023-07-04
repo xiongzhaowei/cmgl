@@ -17,7 +17,7 @@ public:
     DecoderStream(AVStream* stream, AVCodecContext* context, Thread* thread);
     ~DecoderStream();
     
-    RefPtr<StreamSubscription> listen(RefPtr<Consumer<Frame>> consumer) override;
+    RefPtr<StreamSubscription> listen(RefPtr<StreamConsumer<Frame>> consumer) override;
 
     AVStream* stream() const;
     bool available() const;

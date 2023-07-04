@@ -27,7 +27,7 @@ void Renderer::add(RefPtr<Frame> frame) {
     }
     _frameList.push(video);
     if (duration() >= 0.1) {
-        _subscription->pause();
+        _isPaused = true;
     }
 }
 
@@ -39,6 +39,10 @@ void Renderer::close() {
         _subscription->cancel();
         _subscription = nullptr;
     }
+}
+
+bool Renderer::available() const {
+    return !_isPaused;
 }
 
 double Renderer::duration() {
@@ -91,7 +95,7 @@ void AudioRenderer::fill(uint8_t* stream, int len) {
         if (_video) _video->sync(pts);
     }
     if (duration() < 0.1) {
-        _subscription->resume();
+        _isPaused = false;
     }
 }
 
@@ -126,6 +130,6 @@ void VideoRenderer::sync(double pts) {
         _callback();
     }
     if (duration() < 0.1) {
-        _subscription->resume();
+        _isPaused = false;
     }
 }

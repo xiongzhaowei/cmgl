@@ -8,17 +8,19 @@
 
 OMP_FFMPEG_NAMESPACE_BEGIN
 
-class Renderer : public Consumer<Frame> {
+class Renderer : public StreamConsumer<Frame> {
 public:
     Renderer(DecoderStream* stream);
 
     void add(RefPtr<Frame> frame) override;
     void addError() override;
     void close() override;
+    bool available() const override;
 
     double duration();
     virtual void sync(double pts) {}
 protected:
+    volatile bool _isPaused = false;
     double _timebase;
     FrameList _frameList;
     RefPtr<Converter<Frame>> _converter;

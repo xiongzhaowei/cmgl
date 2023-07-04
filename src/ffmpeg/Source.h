@@ -28,77 +28,82 @@ public:
     void close();
 
     AVFormatContext* context() const;
-    AVStream* audio() const;
-    AVStream* video() const;
     RefPtr<MovieSourceStream> stream(AVMediaType codecType);
 
     bool available() const;
     bool read();
 
-    RefPtr<StreamSubscription> listen(RefPtr<Consumer<Packet>> consumer) override;
+    RefPtr<StreamSubscription> listen(RefPtr<StreamConsumer<Packet>> consumer) override;
 };
 
-class MovieDecoder : public Transformer<Packet, Frame> {
-    RefPtr<Consumer<Frame>> _output;
+class MovieDecoder : public StreamConsumer<Packet> {
+    RefPtr<StreamConsumer<Frame>> _output;
     RefPtr<Frame> _frame;
     AVStream* _stream;
     AVCodecContext* _context;
 public:
-    MovieDecoder(RefPtr<Consumer<Frame>> output, AVStream* stream, AVCodecContext* context);
+    MovieDecoder(RefPtr<StreamConsumer<Frame>> output, AVStream* stream, AVCodecContext* context);
     ~MovieDecoder();
+
+    typedef Frame Target;
 
     void add(RefPtr<Packet> packet) override;
     void addError() override;
     void close() override;
+    bool available() const override;
 
     AVStream* stream() const;
     AVCodecContext* context() const;
 
-    bool available() const;
-
-    static RefPtr<MovieDecoder> from(RefPtr<Consumer<Frame>> output, AVStream* stream);
+    static RefPtr<MovieDecoder> from(RefPtr<StreamConsumer<Frame>> output, AVStream* stream);
 };
 
 class MovieSourceStream : public Stream<Frame> {
-    RefPtr<StreamController<Frame>> _controller;
-    RefPtr<MovieDecoder> _decoder;
+    std::list<RefPtr<StreamConsumer<Frame>>> _consumers;
+    WeakPtr<MovieDecoder> _decoder;
+    MovieSourceStream(RefPtr<MovieDecoder> decoder);
 public:
-    MovieSourceStream(RefPtr<StreamController<Frame>> controller, RefPtr<MovieDecoder> decoder);
+    RefPtr<StreamSubscription> listen(RefPtr<StreamConsumer<Frame>> consumer) override;
 
-    RefPtr<StreamSubscription> listen(RefPtr<Consumer<Frame>> consumer) override;
+    void handleFrame(RefPtr<Frame> frame);
+    void handleError();
+    void handleClose();
+    void handleCancel(RefPtr<StreamConsumer<Frame>> consumer);
 
     AVStream* stream() const;
     AVCodecContext* context() const;
-    RefPtr<MovieDecoder> decoder() const;
+    bool available() const;
+
     RefPtr<Stream<Frame>> convert(AVSampleFormat sample_fmt, AVChannelLayout ch_layout, int32_t sample_rate);
     RefPtr<Stream<Frame>> convert(AVPixelFormat format);
 
-    bool available() const;
-
-    static MovieSourceStream* from(AVStream* stream);
+    static RefPtr<MovieSourceStream> from(RefPtr<MovieSource> source, AVStream* stream);
 };
 
-class MovieEncoder : public Transformer<Frame, Packet> {
-    RefPtr<Consumer<Packet>> _output;
+class MovieEncoder : public StreamConsumer<Frame> {
+    RefPtr<StreamConsumer<Packet>> _output;
     RefPtr<Packet> _packet;
     AVStream* _stream;
     AVCodecContext* _context;
-    MovieEncoder(RefPtr<Consumer<Packet>> output, AVStream* stream, AVCodecContext* context);
+    MovieEncoder(RefPtr<StreamConsumer<Packet>> output, AVStream* stream, AVCodecContext* context);
 public:
     ~MovieEncoder();
+
+    typedef Packet Target;
 
     void add(RefPtr<Frame> frame) override;
     void addError() override;
     void close() override;
+    bool available() const override;
 
     AVStream* stream() const;
     AVCodecContext* context() const;
 
-    static RefPtr<MovieEncoder> audio(RefPtr<Consumer<Packet>> output, const AVCodec* codec, AVStream* stream, int32_t bit_rate, AVSampleFormat format, int32_t sample_rate, AVChannelLayout ch_layout, AVDictionary* options = nullptr);
-    static RefPtr<MovieEncoder> video(RefPtr<Consumer<Packet>> output, const AVCodec* codec, AVStream* stream, int32_t bit_rate, AVPixelFormat format, int32_t frame_rate, int32_t width, int32_t height, int32_t gop_size, int32_t max_b_frames, AVDictionary* options = nullptr);
+    static RefPtr<MovieEncoder> audio(RefPtr<StreamConsumer<Packet>> output, const AVCodec* codec, AVStream* stream, int32_t bit_rate, AVSampleFormat format, int32_t sample_rate, AVChannelLayout ch_layout, AVDictionary* options = nullptr);
+    static RefPtr<MovieEncoder> video(RefPtr<StreamConsumer<Packet>> output, const AVCodec* codec, AVStream* stream, int32_t bit_rate, AVPixelFormat format, int32_t frame_rate, int32_t width, int32_t height, int32_t gop_size, int32_t max_b_frames, AVDictionary* options = nullptr);
 };
 
-class MovieTarget : public Consumer<Packet> {
+class MovieTarget : public StreamConsumer<Packet> {
     AVFormatContext* _context;
     MovieTarget(AVFormatContext* context);
 public:
@@ -107,6 +112,7 @@ public:
     void add(RefPtr<Packet> packet) override;
     void addError() override;
     void close() override;
+    bool available() const override;
 
     AVFormatContext* context() const;
     RefPtr<MovieEncoder> audio(int32_t bit_rate, AVSampleFormat format, int32_t sample_rate, AVChannelLayout ch_layout, AVDictionary* options = nullptr);

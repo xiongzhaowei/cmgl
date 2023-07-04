@@ -91,7 +91,7 @@ DecoderStream* DecoderStream::from(AVStream* stream, Thread* thread) {
     return new DecoderStream(stream, context, thread);
 }
 
-DecoderStream::DecoderStream(AVStream* stream, AVCodecContext* context, Thread* thread) : _stream(stream), _context(context), _controller(StreamController<Frame>::sync([thread = RefPtr<Thread>(thread)]() { thread->runOnThread([]() {}); }, [thread = RefPtr<Thread>(thread)]() { thread->runOnThread([]() {}); })) {
+DecoderStream::DecoderStream(AVStream* stream, AVCodecContext* context, Thread* thread) : _stream(stream), _context(context), _controller(StreamController<Frame>::sync()) {
 
 }
 
@@ -99,7 +99,7 @@ DecoderStream::~DecoderStream() {
     if (_context) avcodec_free_context(&_context);
 }
 
-RefPtr<StreamSubscription> DecoderStream::listen(RefPtr<Consumer<Frame>> consumer) {
+RefPtr<StreamSubscription> DecoderStream::listen(RefPtr<StreamConsumer<Frame>> consumer) {
     return _controller->stream()->listen(consumer);
 }
 
@@ -108,7 +108,7 @@ AVStream* DecoderStream::stream() const {
 }
 
 bool DecoderStream::available() const {
-    return !_controller->isPaused() && !_controller->isClosed();
+    return _controller->available();
 }
 
 bool DecoderStream::match(AVFormatContext* format, AVPacket* packet) const {

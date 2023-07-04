@@ -21,16 +21,18 @@ const std::string wcstombs(const std::wstring& wstr, uint32_t codePage) {
 using namespace wheel;
 using namespace wheel::ffmpeg;
 
-class AudioSplitter : public Transformer<Frame> {
-    RefPtr<Consumer<Frame>> _output;
+class AudioSplitter : public StreamConsumer<Frame> {
+    RefPtr<StreamConsumer<Frame>> _output;
     RefPtr<Frame> _frame;
-    int64_t _timestamp;
+    int64_t _timestamp = 0;
     int32_t _sampleCount;
     int32_t _sampleTotal;
-    int32_t _bytesPerSample;
-    bool _planar;
+    int32_t _bytesPerSample = 0;
+    bool _planar = false;
 public:
-    AudioSplitter(RefPtr<Consumer<Frame>> output, int32_t nb_samples) : _output(output), _sampleTotal(nb_samples), _timestamp(0) {
+    typedef Frame Target;
+
+    AudioSplitter(RefPtr<StreamConsumer<Frame>> output, int32_t nb_samples) : _output(output), _sampleTotal(nb_samples) {
         assert(output != nullptr);
         assert(nb_samples > 0);
     }
@@ -91,6 +93,9 @@ public:
     void close() override {
         _output->close();
     }
+    bool available() const override {
+        return _output->available();
+    }
 };
 
 #ifdef main
@@ -132,7 +137,9 @@ int main() {
         videoSource->listen(videoTarget);
 
         for (int i = 0; i < 1000; i++) {
-            source->read();
+            if (source->available()) {
+                source->read();
+            }
         }
 
     }
