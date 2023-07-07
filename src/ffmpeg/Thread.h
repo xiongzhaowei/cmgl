@@ -6,21 +6,6 @@
 
 OMP_FFMPEG_NAMESPACE_BEGIN
 
-class DecodeThread : public Thread {
-public:
-    DecodeThread() = default;
-
-    void run() override;
-    void add(RefPtr<Decoder> decoder);
-    void remove(RefPtr<Decoder> decoder);
-
-    RefPtr<Decoder> decode(const std::string& url);
-private:
-    bool available(std::list<RefPtr<Decoder>>& list);
-
-    std::list<RefPtr<Decoder>> _decoders;
-};
-
 class MovieThread : public Thread {
 public:
     MovieThread() = default;

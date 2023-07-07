@@ -8,8 +8,6 @@
     Stream.h
     AudioSplitter.cpp
     AudioSplitter.h
-    Decoder.cpp
-    Decoder.h
     Converter.cpp
     Converter.h
     Renderer.cpp
