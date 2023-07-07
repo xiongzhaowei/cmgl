@@ -18,7 +18,7 @@ public:
     void close();
 
     AVFormatContext* context() const;
-    RefPtr<MovieSourceStream> stream(AVMediaType codecType);
+    AVStream* stream(AVMediaType codecType) const;
 
     bool available() const;
     bool read();
@@ -45,7 +45,7 @@ public:
     AVStream* stream() const;
     AVCodecContext* context() const;
 
-    static RefPtr<MovieDecoder> from(RefPtr<StreamConsumer<Frame>> output, AVStream* stream);
+    static RefPtr<MovieDecoder> from(RefPtr<StreamConsumer<Frame>> output, AVStream* stream, AVDictionary* options = nullptr);
 };
 
 class MovieSourceStream : public Stream<Frame> {
@@ -60,9 +60,12 @@ public:
     bool available() const;
 
     RefPtr<Stream<Frame>> convert(AVSampleFormat sample_fmt, AVChannelLayout ch_layout, int32_t sample_rate);
+    RefPtr<Stream<Frame>> convert(AVSampleFormat format);
     RefPtr<Stream<Frame>> convert(AVPixelFormat format);
 
-    static RefPtr<MovieSourceStream> from(RefPtr<MovieSource> source, AVStream* stream);
+    static RefPtr<MovieSourceStream> from(RefPtr<MovieSource> source, AVStream* stream, AVDictionary* options = nullptr);
+    static RefPtr<MovieSourceStream> audio(RefPtr<MovieSource> source, AVDictionary* options = nullptr);
+    static RefPtr<MovieSourceStream> video(RefPtr<MovieSource> source, AVDictionary* options = nullptr);
 };
 
 class MovieEncoder : public StreamConsumer<Frame> {

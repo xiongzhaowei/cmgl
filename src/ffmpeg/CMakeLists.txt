@@ -18,4 +18,6 @@
     Thread.h
     Source.cpp
     Source.h
+    Player.cpp
+    Player.h
 )

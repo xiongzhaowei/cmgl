@@ -33,6 +33,22 @@ public:
     static RefPtr<Frame> alloc(AVPixelFormat format, int32_t width, int32_t height);
 };
 
+class Dictionary : public Object {
+    AVDictionary* _dictionary = nullptr;
+public:
+    Dictionary() = default;
+    Dictionary(std::map<std::string, std::string> dict);
+    Dictionary(std::vector<std::pair<std::string, std::string>> dict);
+    ~Dictionary();
+
+    int32_t count() const;
+    AVDictionary* dictionary() const;
+    std::vector<std::string> get(const std::string& key);
+    void add(const std::string& key, const std::string& value);
+    void set(const std::string& key, const std::string& value);
+    void remove(const std::string& key);
+};
+
 class FrameList {
     std::list<RefPtr<Frame>> _list;
     std::mutex _mutex;

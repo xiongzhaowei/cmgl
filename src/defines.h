@@ -39,14 +39,15 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <map>
 #include <thread>
 #include <typeindex>
 #include <functional>
 #include <unordered_map>
 #include "glm/glm.hpp"
 #include "glm/ext.hpp"
-#include "Object.h"
 #include "RefPtr.h"
+#include "Object.h"
 #include "WeakPtr.h"
 #include "WaitableEvent.h"
 #include "Thread.h"

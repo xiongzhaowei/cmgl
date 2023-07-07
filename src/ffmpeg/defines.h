@@ -31,3 +31,4 @@ extern "C" {
 #include "Renderer.h"
 #include "Source.h"
 #include "Thread.h"
+#include "Player.h"

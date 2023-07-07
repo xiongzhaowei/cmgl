@@ -34,20 +34,20 @@ int main() {
     RefPtr<MovieThread> thread = new MovieThread;
     thread->start();
     std::string url = wcstombs(L"D:\\迅雷下载\\Guardian Of The Galaxy Volume 3 (2023) ENG HDTC 1080p x264 AAC - HushRips.mp4", CP_UTF8);
-    std::string output = wcstombs(L"D:\\迅雷下载\\test.asf", CP_UTF8);
+    std::string output = wcstombs(L"D:\\迅雷下载\\test.mp4", CP_UTF8);
 
     RefPtr<ffmpeg::MovieSource> source = new ffmpeg::MovieSource();
     RefPtr<ffmpeg::MovieTarget> target = MovieTarget::from(nullptr, output.c_str());
 
-    RefPtr<ffmpeg::MovieEncoder> audioTarget = target->audio(160616, AV_SAMPLE_FMT_FLTP, 44100, { AV_CHANNEL_ORDER_NATIVE, 2, AV_CH_LAYOUT_STEREO });
-    RefPtr<ffmpeg::MovieEncoder> videoTarget = target->video(4000000, AV_PIX_FMT_YUV420P, 25, 1920, 1080, 25, 0);
+    RefPtr<ffmpeg::MovieEncoder> audioTarget = target->encoder(160616, AV_SAMPLE_FMT_FLTP, 44100, { AV_CHANNEL_ORDER_NATIVE, 2, AV_CH_LAYOUT_STEREO });
+    RefPtr<ffmpeg::MovieEncoder> videoTarget = target->encoder(4000000, AV_PIX_FMT_YUV420P, 25, 1920, 1080, 25, 0);
 
     target->openFile(output);
     target->writeHeader();
 
     if (source->open(url)) {
-        RefPtr<Stream<Frame>> videoSource = source->stream(AVMEDIA_TYPE_VIDEO)->convert(videoTarget->context()->pix_fmt);
-        RefPtr<Stream<Frame>> audioSource = source->stream(AVMEDIA_TYPE_AUDIO)->convert(
+        RefPtr<Stream<Frame>> videoSource = MovieSourceStream::video(source)->convert(videoTarget->context()->pix_fmt);
+        RefPtr<Stream<Frame>> audioSource = MovieSourceStream::audio(source)->convert(
             audioTarget->context()->sample_fmt,
             audioTarget->context()->ch_layout,
             audioTarget->context()->sample_rate

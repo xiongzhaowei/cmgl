@@ -81,6 +81,52 @@ RefPtr<Frame> Frame::alloc(AVPixelFormat format, int32_t width, int32_t height) 
     return frame && frame->setVideoBuffer(format, width, height) ? frame : nullptr;
 }
 
+Dictionary::Dictionary(std::map<std::string, std::string> dict) {
+    for (auto item : dict) {
+        av_dict_set(&_dictionary, item.first.c_str(), item.second.c_str(), 0);
+    }
+}
+
+Dictionary::Dictionary(std::vector<std::pair<std::string, std::string>> dict) {
+    for (auto item : dict) {
+        av_dict_set(&_dictionary, item.first.c_str(), item.second.c_str(), AV_DICT_MULTIKEY);
+    }
+}
+
+Dictionary::~Dictionary() {
+    av_dict_free(&_dictionary);
+}
+
+AVDictionary* Dictionary::dictionary() const {
+    return _dictionary;
+}
+
+int32_t Dictionary::count() const {
+    return av_dict_count(_dictionary);
+}
+
+std::vector<std::string> Dictionary::get(const std::string& key) {
+    std::vector<std::string> result;
+    AVDictionaryEntry* entry = av_dict_get(_dictionary, key.c_str(), nullptr, 0);
+    while (entry != nullptr) {
+        if (entry->value != nullptr) result.push_back(entry->value);
+        entry = av_dict_get(_dictionary, key.c_str(), entry, 0);
+    }
+    return result;
+}
+
+void Dictionary::add(const std::string& key, const std::string& value) {
+    av_dict_set(&_dictionary, key.c_str(), value.c_str(), AV_DICT_MULTIKEY);
+}
+
+void Dictionary::set(const std::string& key, const std::string& value) {
+    av_dict_set(&_dictionary, key.c_str(), value.c_str(), 0);
+}
+
+void Dictionary::remove(const std::string& key) {
+    av_dict_set(&_dictionary, key.c_str(), nullptr, 0);
+}
+
 void FrameList::push(RefPtr<Frame> frame) {
     std::lock_guard<std::mutex> lock(_mutex);
     auto pred = [](RefPtr<Frame> left, RefPtr<Frame> right) {

@@ -57,6 +57,7 @@ void Thread::run() {
 void Thread::runOnThread(const std::function<void()>& callback) {
     _tasks->push(callback);
     _event->signal();
+    if (!_isRunning) start();
 }
 
 void Thread::TaskList::push(const std::function<void()>& object) {

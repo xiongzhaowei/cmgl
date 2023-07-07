@@ -26,11 +26,7 @@ int APIENTRY wWinMain(
     _In_ int show_command
 ) {
     std::wstring url = L"D:\\迅雷下载\\Guardian Of The Galaxy Volume 3 (2023) ENG HDTC 1080p x264 AAC - HushRips.mp4";
-    wheel::RefPtr<wheel::ffmpeg::DecodeThread> thread = new wheel::ffmpeg::DecodeThread;
-    wheel::RefPtr<wheel::ffmpeg::Decoder> movie = thread->decode(wcstombs(url, CP_UTF8));
-
-    wheel::RefPtr<wheel::ffmpeg::AudioRenderer> audio;
-    wheel::RefPtr<wheel::ffmpeg::VideoRenderer> video;
+    wheel::RefPtr<wheel::ffmpeg::MoviePlayer> player = wheel::ffmpeg::MoviePlayer::file(wcstombs(url, CP_UTF8));
 
     wheel::RefPtr<wheel::ui::windows::PlatformWindow> w = new wheel::ui::windows::PlatformWindow(wheel::ui::windows::PlatformWindow::Style::create(TEXT("Player"), TEXT(""), true, true, true, true, false, false));
     if (w->create(1024, 768, nullptr, true)) {
@@ -45,18 +41,13 @@ int APIENTRY wWinMain(
         w->addSubview(caption);
         w->showWindow(SW_SHOW);
 
-        audio = wheel::ffmpeg::AudioRenderer::from(movie->audio(), AUDIO_F32);
-        video = wheel::ffmpeg::VideoRenderer::from(movie->video(), source, [w]() {
-            PostMessage(w->handle(), WM_USER, 0, 0); // 通知刷新画面
-        });
-        audio->attach(video);
-        audio->play(true);
-        movie->seek(600, []() {
+        player->bind(source, AV_PIX_FMT_YUV420P, [w]() { PostMessage(w->handle(), WM_USER, 0, 0); });
+        player->play(true);
+        player->seek(600, []() {
             printf("done");
         });
     }
 
-    thread->start();
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0)) {
         if (msg.message == WM_USER) {
