@@ -17,27 +17,33 @@ public:
 
 class Object;
 
-class WeakOwner : public virtual RefCounted {
-    Object *_value;
+class WeakOwner final : public RefCounted {
+    std::atomic_bool _valid = true;
     WeakOwner(const WeakOwner &) = delete;
     WeakOwner(const WeakOwner &&) = delete;
 public:
-    WeakOwner(Object *value);
-    Object *value();
-    Object *value() const;
-
+    WeakOwner();
+    bool valid() const;
     void clear();
 };
 
-class Object : public virtual RefCounted {
-    WeakOwner *_weakOwner;
+class WeakSupported {
+    RefPtr<WeakOwner> _weak;
+    WeakSupported(const WeakSupported&) = delete;
+    WeakSupported(const WeakSupported&&) = delete;
+public:
+    WeakSupported();
+    ~WeakSupported();
+
+    WeakOwner* weak() const;
+};
+
+class Object : public virtual RefCounted, public virtual WeakSupported {
     Object(const Object &) = delete;
     Object(const Object &&) = delete;
 public:
-    Object();
-    virtual ~Object();
-
-    WeakOwner *weakOwner() const;
+    Object() = default;
+    virtual ~Object() = default;
 };
 
 OMP_NAMESPACE_END

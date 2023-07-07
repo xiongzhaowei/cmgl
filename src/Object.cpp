@@ -22,31 +22,25 @@ bool RefCounted::release() const {
     return --_refCount <= 0;
 }
 
-WeakOwner::WeakOwner(Object *value) : _value(value) {
+WeakOwner::WeakOwner() {
 
 }
 
-Object *WeakOwner::value() {
-    return _value;
-}
-
-Object *WeakOwner::value() const {
-    return _value;
+bool WeakOwner::valid() const {
+    return _valid;
 }
 
 void WeakOwner::clear() {
-    _value = nullptr;
+    _valid = false;
 }
 
-Object::Object() : _weakOwner(new WeakOwner(this)) {
-    _weakOwner->retain();
+WeakSupported::WeakSupported() : _weak(new WeakOwner()) {
 }
 
-Object::~Object() {
-    _weakOwner->clear();
-    _weakOwner->release();
+WeakSupported::~WeakSupported() {
+    _weak->clear();
 }
 
-WeakOwner *Object::weakOwner() const {
-    return _weakOwner;
+WeakOwner* WeakSupported::weak() const {
+    return _weak;
 }
