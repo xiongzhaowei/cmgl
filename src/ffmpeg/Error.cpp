@@ -24,11 +24,11 @@ bool Error::verify(int error, const char* method, int line) {
 }
 
 void Error::report(int error, const char* method, int line) {
-    Error e;
-    e.code = error;
-    e.message = __av_err2str(error);
-    e.method = method;
-    e.line = line;
+    RefPtr<Error> e = new Error;
+    e->code = error;
+    e->message = __av_err2str(error);
+    e->method = method;
+    e->line = line;
 
-    e.print();
+    e->print();
 }

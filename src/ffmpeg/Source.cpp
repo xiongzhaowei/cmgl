@@ -9,6 +9,28 @@ OMP_FFMPEG_USING_NAMESPACE
 MovieSource::MovieSource() : _packet(new Packet), _controller(StreamController<Packet>::sync()) {
 }
 
+bool MovieSource::open(RefPtr<MovieFile> file) {
+	AVFormatContext* context = avformat_alloc_context();
+	context->pb = avio_alloc_context(
+		file->buffer(),
+		file->bufferSize(),
+		0,
+		file.value(),
+		[](void *opaque, uint8_t *buf, int buf_size) { return static_cast<MovieFile*>(opaque)->read(buf, buf_size); },
+		nullptr,
+		[](void *opaque, int64_t offset, int whence) { return static_cast<MovieFile*>(opaque)->seek(offset, whence); }
+	);
+
+	if (Error::verify(avformat_open_input(&context, nullptr, nullptr, nullptr), __FUNCSIG__, __LINE__)) {
+		if (Error::verify(avformat_find_stream_info(context, nullptr), __FUNCSIG__, __LINE__)) {
+			_context = context;
+			return true;
+		}
+		avformat_close_input(&context);
+	}
+	return false;
+}
+
 bool MovieSource::open(const std::string& filename) {
 	AVFormatContext* context = nullptr;
 
@@ -51,6 +73,13 @@ bool MovieSource::read() {
 		return true;
 	}
 	return false;
+}
+
+bool MovieSource::seek(double time) {
+	if (_context == nullptr) return false;
+
+	int64_t ts = std::clamp<int64_t>(int64_t(time * AV_TIME_BASE), 0, _context->duration);
+	return Error::verify(avformat_seek_file(_context, -1, 0, ts, _context->duration, 0), __FUNCSIG__, __LINE__);
 }
 
 RefPtr<StreamSubscription> MovieSource::listen(RefPtr<StreamConsumer<Packet>> consumer) {
@@ -178,6 +207,77 @@ RefPtr<MovieSourceStream> MovieSourceStream::video(RefPtr<MovieSource> source, A
 	AVStream* stream = source->stream(AVMEDIA_TYPE_VIDEO);
 	if (stream == nullptr) return nullptr;
 	return from(source, stream, options);
+}
+
+MovieBufferedConsumer::MovieBufferedConsumer(uint32_t maxCount) : _maxCount(maxCount) {
+}
+
+void MovieBufferedConsumer::add(RefPtr<Frame> frame) {
+    if (frame == nullptr) return;
+
+    RefPtr<Frame> output;
+    if (_converter) {
+		output = _converter->convert(frame);
+    } else {
+		output = Frame::alloc();
+		output->swap(frame);
+    }
+    push(output);
+}
+
+void MovieBufferedConsumer::addError() {
+
+}
+
+void MovieBufferedConsumer::close() {
+	if (_subscription != nullptr) {
+		_subscription->cancel();
+		_subscription = nullptr;
+	}
+}
+
+bool MovieBufferedConsumer::available() const {
+	return size() < _maxCount;
+}
+
+size_t MovieBufferedConsumer::size() const {
+	std::lock_guard<std::mutex> lock(_mutex);
+	return _list.size();
+}
+
+void MovieBufferedConsumer::push(RefPtr<Frame> frame) {
+	std::lock_guard<std::mutex> lock(_mutex);
+	auto pred = [](RefPtr<Frame> left, RefPtr<Frame> right) {
+		return left->timestamp() < right->timestamp();
+	};
+	_list.insert(std::lower_bound(_list.begin(), _list.end(), frame, pred), frame);
+}
+
+RefPtr<Frame> MovieBufferedConsumer::pop() {
+	std::lock_guard<std::mutex> lock(_mutex);
+	RefPtr<Frame> frame;
+	if (!_list.empty()) {
+		frame = _list.front();
+		_list.pop_front();
+	}
+	return frame;
+}
+
+RefPtr<Frame> MovieBufferedConsumer::pop(int64_t timestamp) {
+	std::lock_guard<std::mutex> lock(_mutex);
+	RefPtr<Frame> frame;
+	if (!_list.empty()) {
+		if (_list.front()->timestamp() < timestamp) {
+			frame = _list.front();
+			_list.pop_front();
+		}
+	}
+	return frame;
+}
+
+void MovieBufferedConsumer::clear() {
+	std::lock_guard<std::mutex> lock(_mutex);
+	_list.clear();
 }
 
 MovieEncoder::MovieEncoder(RefPtr<StreamConsumer<Packet>> output, AVStream* stream, AVCodecContext* context) : _output(output), _stream(stream), _context(context), _packet(new Packet) {

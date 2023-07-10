@@ -13,6 +13,7 @@ class MoviePlayer : public Object {
     RefPtr<MovieSourceStream> _videoSource;
     RefPtr<AudioRenderer> _audioRenderer;
     RefPtr<VideoRenderer> _videoRenderer;
+    RefPtr<Stream<Frame>> _videoFilter;
 public:
     static RefPtr<MoviePlayer> file(const std::string& path, RefPtr<MovieThread> thread = nullptr);
 

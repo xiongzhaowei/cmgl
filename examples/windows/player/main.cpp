@@ -25,6 +25,7 @@ int APIENTRY wWinMain(
     _In_ wchar_t *command_line,
     _In_ int show_command
 ) {
+    std::wstring http = L"http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
     std::wstring url = L"D:\\迅雷下载\\Guardian Of The Galaxy Volume 3 (2023) ENG HDTC 1080p x264 AAC - HushRips.mp4";
     wheel::RefPtr<wheel::ffmpeg::MoviePlayer> player = wheel::ffmpeg::MoviePlayer::file(wcstombs(url, CP_UTF8));
 

@@ -8,12 +8,21 @@ OMP_FFMPEG_NAMESPACE_BEGIN
 
 class MovieSourceStream;
 
+class MovieFile : public Object {
+public:
+    virtual uint8_t* buffer() const = 0;
+    virtual int32_t bufferSize() const = 0;
+    virtual int read(uint8_t *buf, int buf_size) = 0;
+    virtual int64_t seek(int64_t offset, int whence) = 0;
+};
+
 class MovieSource : public Stream<Packet> {
     RefPtr<StreamController<Packet>> _controller;
     RefPtr<Packet> _packet;
     AVFormatContext* _context = nullptr;
 public:
     MovieSource();
+    bool open(RefPtr<MovieFile> file);
     bool open(const std::string& filename);
     void close();
 
@@ -22,6 +31,7 @@ public:
 
     bool available() const;
     bool read();
+    bool seek(double time);
 
     RefPtr<StreamSubscription> listen(RefPtr<StreamConsumer<Packet>> consumer) override;
 };
@@ -66,6 +76,27 @@ public:
     static RefPtr<MovieSourceStream> from(RefPtr<MovieSource> source, AVStream* stream, AVDictionary* options = nullptr);
     static RefPtr<MovieSourceStream> audio(RefPtr<MovieSource> source, AVDictionary* options = nullptr);
     static RefPtr<MovieSourceStream> video(RefPtr<MovieSource> source, AVDictionary* options = nullptr);
+};
+
+class MovieBufferedConsumer : public StreamConsumer<Frame> {
+    uint32_t _maxCount;
+    mutable std::mutex _mutex;
+    std::list<RefPtr<Frame>> _list;
+    RefPtr<Converter<Frame>> _converter;
+    RefPtr<StreamSubscription> _subscription;
+public:
+    MovieBufferedConsumer(uint32_t maxCount);
+
+    void add(RefPtr<Frame> frame) override;
+    void addError() override;
+    void close() override;
+    bool available() const override;
+
+    size_t size() const;
+    void push(RefPtr<Frame> frame);
+    RefPtr<Frame> pop();
+    RefPtr<Frame> pop(int64_t timestamp);
+    void clear();
 };
 
 class MovieEncoder : public StreamConsumer<Frame> {

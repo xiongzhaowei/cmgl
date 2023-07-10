@@ -6,7 +6,7 @@
 
 OMP_FFMPEG_NAMESPACE_BEGIN
 
-class Error {
+class Error : public Object {
 public:
     int32_t code;
     std::string message;
@@ -17,6 +17,10 @@ public:
 
     static bool verify(int error, const char* method, int line);
     static void report(int error, const char* method, int line);
+};
+
+class AVError : public Error {
+
 };
 
 OMP_FFMPEG_NAMESPACE_END
