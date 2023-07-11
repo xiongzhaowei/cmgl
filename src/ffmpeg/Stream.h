@@ -115,12 +115,19 @@ public:
         _consumers.push_back(consumer);
         _mutex.unlock();
         class _StreamSubscription : public StreamSubscription {
-            std::function<void()> _cancel;
+            RefPtr<_SyncStreamController<T>> _controller;
+            RefPtr<StreamConsumer<T>> _consumer;
         public:
-            _StreamSubscription(std::function<void()> cancel) : _cancel(cancel) {}
-            void cancel() { _cancel(); }
+            _StreamSubscription(RefPtr<_SyncStreamController<T>> controller, RefPtr<StreamConsumer<T>> consumer) : _controller(controller), _consumer(consumer) {}
+            void cancel() {
+                if (_controller) {
+                    _controller->cancel(_consumer);
+                    _controller = nullptr;
+                    _consumer = nullptr;
+                }
+            }
         };
-        return new _StreamSubscription(std::bind(&_SyncStreamController::cancel, this, consumer));
+        return new _StreamSubscription(this, consumer);
     }
     void cancel(RefPtr<StreamConsumer<T>> consumer) {
         _mutex.lock();
@@ -138,10 +145,15 @@ template <typename T>
 template <typename Target>
 RefPtr<Stream<Target>> Stream<T>::convert(std::function<typename StreamConsumer<Target>::Element(typename StreamConsumer<T>::Element)> convert) {
     class Converter : public StreamConsumer<T>, public Stream<Target> {
+        friend class Stream<T>;
+        RefPtr<StreamSubscription> _subscription;
         RefPtr<StreamController<Target>> _controller = StreamController<Target>::sync();
         std::function<StreamConsumer<Target>::Element(StreamConsumer<T>::Element)> _convert;
     public:
         Converter(std::function<StreamConsumer<Target>::Element(StreamConsumer<T>::Element)> convert) : _convert(convert) {}
+        ~Converter() {
+            if (_subscription != nullptr) { _subscription->cancel(); _subscription = nullptr; }
+        }
         void add(StreamConsumer<T>::Element object) override { _controller->add(_convert(object)); }
         void addError() override { _controller->addError(); }
         void close() override { _controller->close(); }
@@ -151,7 +163,7 @@ RefPtr<Stream<Target>> Stream<T>::convert(std::function<typename StreamConsumer<
         }
     };
     RefPtr<Converter> converter = new Converter(convert);
-    listen(converter);
+    converter->_subscription = listen(converter);
     return converter;
 }
 
@@ -159,10 +171,15 @@ template <typename T>
 template <typename Converter>
 RefPtr<Stream<typename Converter::Target>> Stream<T>::convert(RefPtr<Converter> converter) {
     class _Converter : public StreamConsumer<T>, public Stream<typename Converter::Target> {
+        friend class Stream<T>;
+        RefPtr<StreamSubscription> _subscription;
         RefPtr<StreamController<typename Converter::Target>> _controller = StreamController<typename Converter::Target>::sync();
         RefPtr<Converter> _converter;
     public:
         _Converter(RefPtr<Converter> converter) : _converter(converter) {}
+        ~_Converter() {
+            if (_subscription != nullptr) { _subscription->cancel(); _subscription = nullptr; }
+        }
         void add(StreamConsumer<T>::Element object) override { _controller->add(_converter->convert(object)); }
         void addError() override { _controller->addError(); }
         void close() override { _controller->close(); }
@@ -172,7 +189,7 @@ RefPtr<Stream<typename Converter::Target>> Stream<T>::convert(RefPtr<Converter> 
         }
     };
     RefPtr<_Converter> stream = new _Converter(converter);
-    listen(stream);
+    stream->_subscription = listen(stream);
     return stream;
 }
 

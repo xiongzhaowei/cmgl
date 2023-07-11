@@ -13,11 +13,10 @@ class MoviePlayer : public Object {
     RefPtr<MovieSourceStream> _videoSource;
     RefPtr<AudioRenderer> _audioRenderer;
     RefPtr<VideoRenderer> _videoRenderer;
-    RefPtr<Stream<Frame>> _videoFilter;
 public:
     static RefPtr<MoviePlayer> file(const std::string& path, RefPtr<MovieThread> thread = nullptr);
 
-    void bind(RefPtr<render::VideoSource> output, AVPixelFormat format, std::function<void()> update);
+    void bind(AVPixelFormat format, std::function<void(RefPtr<Frame>)> render);
     void play(bool state);
     void seek(double time, std::function<void()> callback);
     double duration() const;

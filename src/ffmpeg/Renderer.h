@@ -4,13 +4,15 @@
 
 #pragma once
 
-#include "SDL2/SDL.h"
-
 OMP_FFMPEG_NAMESPACE_BEGIN
 
 class VideoRenderer : public Object {
 public:
-    static RefPtr<VideoRenderer> from(RefPtr<MovieBufferedConsumer> buffer, AVRational time_base, RefPtr<render::VideoSource> source, std::function<void()> callback);
+    static RefPtr<VideoRenderer> from(
+        RefPtr<MovieBufferedConsumer> buffer,
+        AVRational time_base,
+        std::function<void(RefPtr<Frame>)> callback
+    );
     VideoRenderer(RefPtr<MovieBufferedConsumer> buffer, double time_base);
     ~VideoRenderer();
 
@@ -18,8 +20,7 @@ public:
 private:
     double _time_base;
     RefPtr<MovieBufferedConsumer> _buffer;
-    RefPtr<render::VideoSource> _source;
-    std::function<void()> _callback;
+    std::function<void(RefPtr<Frame>)> _callback;
 };
 
 class AudioRenderer : public Object {

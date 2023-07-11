@@ -59,10 +59,13 @@ public:
 };
 
 class MovieSourceStream : public Stream<Frame> {
+    RefPtr<StreamSubscription> _subscription;
     RefPtr<StreamController<Frame>> _controller;
     WeakPtr<MovieDecoder> _decoder;
-    MovieSourceStream(RefPtr<StreamController<Frame>> controller, RefPtr<MovieDecoder> decoder);
+    MovieSourceStream(RefPtr<StreamController<Frame>> controller, RefPtr<MovieDecoder> decoder, RefPtr<StreamSubscription> subscription);
 public:
+    ~MovieSourceStream();
+
     RefPtr<StreamSubscription> listen(RefPtr<StreamConsumer<Frame>> consumer) override;
 
     AVStream* stream() const;
@@ -85,7 +88,7 @@ class MovieBufferedConsumer : public StreamConsumer<Frame> {
     RefPtr<Converter<Frame>> _converter;
     RefPtr<StreamSubscription> _subscription;
 public:
-    MovieBufferedConsumer(uint32_t maxCount);
+    MovieBufferedConsumer(RefPtr<Stream<Frame>> stream, uint32_t maxCount);
 
     void add(RefPtr<Frame> frame) override;
     void addError() override;

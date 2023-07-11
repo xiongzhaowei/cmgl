@@ -146,8 +146,15 @@ RefPtr<MovieDecoder> MovieDecoder::from(RefPtr<StreamConsumer<Frame>> output, AV
 	return new MovieDecoder(output, stream, context);
 }
 
-MovieSourceStream::MovieSourceStream(RefPtr<StreamController<Frame>> controller, RefPtr<MovieDecoder> decoder) : _decoder(decoder), _controller(controller) {
+MovieSourceStream::MovieSourceStream(RefPtr<StreamController<Frame>> controller, RefPtr<MovieDecoder> decoder, RefPtr<StreamSubscription> subscription) : _decoder(decoder), _controller(controller), _subscription(subscription) {
 
+}
+
+MovieSourceStream::~MovieSourceStream() {
+	if (_subscription != nullptr) {
+		_subscription->cancel();
+		_subscription = nullptr;
+	}
 }
 
 RefPtr<StreamSubscription> MovieSourceStream::listen(RefPtr<StreamConsumer<Frame>> consumer) {
@@ -177,8 +184,8 @@ RefPtr<Stream<Frame>> MovieSourceStream::convert(AVSampleFormat sample_fmt) {
 }
 
 RefPtr<Stream<Frame>> MovieSourceStream::convert(AVPixelFormat format) {
-	if (stream()->codecpar->format == format) return this;
 	assert(stream()->codecpar->codec_type == AVMEDIA_TYPE_VIDEO);
+	if (stream()->codecpar->format == format) return this;
 	return Stream<Frame>::convert(VideoConverter::create(stream()->codecpar, format));
 }
 
@@ -192,8 +199,7 @@ RefPtr<MovieSourceStream> MovieSourceStream::from(RefPtr<MovieSource> source, AV
 
 	RefPtr<StreamController<Frame>> controller = StreamController<Frame>::sync();
 	RefPtr<MovieDecoder> decoder = MovieDecoder::from(controller, stream, options);
-	RefPtr<MovieSourceStream> result = new MovieSourceStream(controller, decoder);
-	source->listen(decoder);
+	RefPtr<MovieSourceStream> result = new MovieSourceStream(controller, decoder, source->listen(decoder));
 	return result;
 }
 
@@ -209,7 +215,7 @@ RefPtr<MovieSourceStream> MovieSourceStream::video(RefPtr<MovieSource> source, A
 	return from(source, stream, options);
 }
 
-MovieBufferedConsumer::MovieBufferedConsumer(uint32_t maxCount) : _maxCount(maxCount) {
+MovieBufferedConsumer::MovieBufferedConsumer(RefPtr<Stream<Frame>> stream, uint32_t maxCount) : _subscription(stream->listen(this)), _maxCount(maxCount) {
 }
 
 void MovieBufferedConsumer::add(RefPtr<Frame> frame) {
@@ -255,23 +261,20 @@ void MovieBufferedConsumer::push(RefPtr<Frame> frame) {
 
 RefPtr<Frame> MovieBufferedConsumer::pop() {
 	std::lock_guard<std::mutex> lock(_mutex);
-	RefPtr<Frame> frame;
-	if (!_list.empty()) {
-		frame = _list.front();
-		_list.pop_front();
-	}
+	if (_list.empty()) return nullptr;
+
+	RefPtr<Frame> frame = _list.front();
+	_list.pop_front();
 	return frame;
 }
 
 RefPtr<Frame> MovieBufferedConsumer::pop(int64_t timestamp) {
 	std::lock_guard<std::mutex> lock(_mutex);
-	RefPtr<Frame> frame;
-	if (!_list.empty()) {
-		if (_list.front()->timestamp() < timestamp) {
-			frame = _list.front();
-			_list.pop_front();
-		}
-	}
+	if (_list.empty()) return nullptr;
+	if (_list.front()->timestamp() > timestamp) return nullptr;
+
+	RefPtr<Frame> frame = _list.front();
+	_list.pop_front();
 	return frame;
 }
 

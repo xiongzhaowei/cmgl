@@ -42,7 +42,10 @@ int APIENTRY wWinMain(
         w->addSubview(caption);
         w->showWindow(SW_SHOW);
 
-        player->bind(source, AV_PIX_FMT_YUV420P, [w]() { PostMessage(w->handle(), WM_USER, 0, 0); });
+        player->bind(AV_PIX_FMT_YUV420P, [w, source](wheel::RefPtr<wheel::ffmpeg::Frame> frame) {
+            source->update(frame->frame());
+            PostMessage(w->handle(), WM_USER, 0, 0);
+        });
         player->play(true);
         player->seek(600, []() {
             printf("done");

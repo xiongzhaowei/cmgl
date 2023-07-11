@@ -5,6 +5,7 @@
 #include "defines.h"
 #include "Converter.h"
 #include "Renderer.h"
+#include "SDL2/SDL.h"
 
 OMP_FFMPEG_USING_NAMESPACE
 
@@ -108,11 +109,9 @@ void AudioRenderer::play(bool state) {
 RefPtr<VideoRenderer> VideoRenderer::from(
     RefPtr<MovieBufferedConsumer> buffer,
     AVRational time_base,
-    RefPtr<render::VideoSource> renderSource,
-    std::function<void()> callback
+    std::function<void(RefPtr<Frame>)> callback
 ) {
     RefPtr<VideoRenderer> renderer = new VideoRenderer(buffer, av_q2d(time_base));
-    renderer->_source = renderSource;
     renderer->_callback = callback;
     return renderer;
 }
@@ -128,8 +127,6 @@ VideoRenderer::~VideoRenderer() {
 void VideoRenderer::sync(double pts) {
     int64_t timestamp = pts / _time_base;
     while (RefPtr<Frame> frame = _buffer->pop(timestamp)) {
-        _source->update(frame->frame());
-        frame = nullptr;
-        _callback();
+        _callback(frame);
     }
 }

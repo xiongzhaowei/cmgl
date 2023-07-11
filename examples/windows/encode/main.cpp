@@ -21,9 +21,6 @@ const std::string wcstombs(const std::wstring& wstr, uint32_t codePage) {
 using namespace wheel;
 using namespace wheel::ffmpeg;
 
-#ifdef main
-#undef main
-#endif
 int main() {
 //int APIENTRY wWinMain(
 //    _In_ HINSTANCE instance,

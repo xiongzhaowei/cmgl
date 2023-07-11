@@ -22,24 +22,22 @@ RefPtr<MoviePlayer> MoviePlayer::file(const std::string& path, RefPtr<MovieThrea
     return player;
 }
 
-void MoviePlayer::bind(RefPtr<render::VideoSource> output, AVPixelFormat format, std::function<void()> update) {
+void MoviePlayer::bind(AVPixelFormat format, std::function<void(RefPtr<Frame>)> render) {
     if (AVStream* audioStream = _source->stream(AVMEDIA_TYPE_AUDIO)) {
-        RefPtr<MovieBufferedConsumer> buffer = new MovieBufferedConsumer(5);
-        _audioSource->listen(buffer);
+        RefPtr<MovieBufferedConsumer> buffer = new MovieBufferedConsumer(_audioSource, 5);
         _audioRenderer = AudioRenderer::from(buffer, audioStream->time_base, _thread, (AVSampleFormat)audioStream->codecpar->format, audioStream->codecpar->ch_layout, audioStream->codecpar->sample_rate, audioStream->codecpar->frame_size);
     }
     if (AVStream* videoStream = _source->stream(AVMEDIA_TYPE_VIDEO)) {
-        RefPtr<MovieBufferedConsumer> buffer = new MovieBufferedConsumer(5);
-        _videoFilter = _videoSource->convert(format);
-        _videoFilter->listen(buffer);
-        _videoRenderer = VideoRenderer::from(buffer, videoStream->time_base, output, update);
+        RefPtr<MovieBufferedConsumer> buffer = new MovieBufferedConsumer(_videoSource->convert(format), 5);
+        _videoRenderer = VideoRenderer::from(buffer, videoStream->time_base, render);
     }
     if (_audioRenderer && _videoRenderer) _audioRenderer->attach(_videoRenderer);
 }
 
 void MoviePlayer::play(bool state) {
-    if (_audioRenderer) _audioRenderer->play(state);
-    _thread->runOnThread([]() {});
+    if (_audioRenderer) {
+        _thread->runOnThread([_audioRenderer = _audioRenderer, state]() { _audioRenderer->play(state); });
+    }
 }
 
 void MoviePlayer::seek(double time, std::function<void()> callback) {
