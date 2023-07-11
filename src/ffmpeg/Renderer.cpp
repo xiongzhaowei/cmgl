@@ -65,6 +65,52 @@ AudioRenderer::~AudioRenderer() {
     }
 }
 
+double AudioRenderer::volume() const {
+    return _volume;
+}
+
+void AudioRenderer::setVolume(double volume) {
+    _volume = volume;
+}
+
+void AudioRenderer::fill(AVSampleFormat format, uint8_t* dst, uint8_t* src, size_t count, double volume) {
+    switch (av_get_alt_sample_fmt(format, 0)) {
+    case AV_SAMPLE_FMT_U8:
+        for (size_t i = 0; i < count; i++) {
+            dst[i] = std::clamp<int16_t>((src[i] + INT8_MIN) * volume, INT8_MIN, INT8_MAX) - INT8_MIN;
+        }
+        break;
+    case AV_SAMPLE_FMT_S16:
+        for (size_t i = 0; i < count; i++) {
+            ((int16_t*)dst)[i] = std::clamp<int16_t>(((int16_t*)src)[i] * volume, INT16_MIN, INT16_MAX);
+        }
+        break;
+    case AV_SAMPLE_FMT_S32:
+        for (size_t i = 0; i < count; i++) {
+            ((int32_t*)dst)[i] = std::clamp<int32_t>(((int32_t*)src)[i] * volume, INT32_MIN, INT32_MAX);
+        }
+        break;
+    case AV_SAMPLE_FMT_S64:
+        for (size_t i = 0; i < count; i++) {
+            ((int64_t*)dst)[i] = std::clamp<int64_t>(((int64_t*)src)[i] * volume, INT64_MIN, INT64_MAX);
+        }
+        break;
+    case AV_SAMPLE_FMT_FLT:
+        for (size_t i = 0; i < count; i++) {
+            ((float*)dst)[i] = std::clamp<float>(((float*)src)[i] * volume, -1, 1);
+        }
+        break;
+    case AV_SAMPLE_FMT_DBL:
+        for (size_t i = 0; i < count; i++) {
+            ((double*)dst)[i] = std::clamp<double>(((double*)src)[i] * volume, -1, 1);
+        }
+        break;
+    default:
+        memcpy(dst, src, count * av_get_bytes_per_sample(format));
+        break;
+    }
+}
+
 void AudioRenderer::fill(uint8_t* stream, int len) {
     RefPtr<Frame> frame = _buffer->pop();
     if (frame != nullptr && _converter != nullptr) {
@@ -74,10 +120,11 @@ void AudioRenderer::fill(uint8_t* stream, int len) {
     if (frame != nullptr) {
         double pts = frame->timestamp() * _time_base;
 
-        int32_t bytesPerSample = av_get_bytes_per_sample((AVSampleFormat)frame->frame()->format);
+        AVSampleFormat format = (AVSampleFormat)frame->frame()->format;
+        int32_t bytesPerSample = av_get_bytes_per_sample(format);
         int32_t nb_channels = frame->frame()->ch_layout.nb_channels;
         int32_t count = std::max(std::min(frame->frame()->linesize[0], len), 0);
-        if (av_sample_fmt_is_planar((AVSampleFormat)frame->frame()->format)) {
+        if (av_sample_fmt_is_planar(format)) {
             count /= bytesPerSample * nb_channels;
             for (int32_t i = 0; i < count; i++) {
                 for (int32_t channel = 0; channel < nb_channels; channel++) {
@@ -88,8 +135,9 @@ void AudioRenderer::fill(uint8_t* stream, int len) {
                     );
                 }
             }
+            fill(format, stream, stream, count * nb_channels, _volume);
         } else {
-            memcpy(stream, frame->frame()->extended_data[0], count);
+            fill(format, stream, frame->frame()->extended_data[0], count / bytesPerSample, _volume);
         }
         _thread->runOnThread([=]() {
             if (_attached) _attached->sync(pts);
@@ -111,12 +159,10 @@ RefPtr<VideoRenderer> VideoRenderer::from(
     AVRational time_base,
     std::function<void(RefPtr<Frame>)> callback
 ) {
-    RefPtr<VideoRenderer> renderer = new VideoRenderer(buffer, av_q2d(time_base));
-    renderer->_callback = callback;
-    return renderer;
+    return new VideoRenderer(buffer, av_q2d(time_base), callback);
 }
 
-VideoRenderer::VideoRenderer(RefPtr<MovieBufferedConsumer> buffer, double time_base) : _buffer(buffer), _time_base(time_base) {
+VideoRenderer::VideoRenderer(RefPtr<MovieBufferedConsumer> buffer, double time_base, std::function<void(RefPtr<Frame>)> callback) : _buffer(buffer), _time_base(time_base), _callback(callback) {
 
 }
 

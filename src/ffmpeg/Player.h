@@ -20,6 +20,9 @@ public:
     void play(bool state);
     void seek(double time, std::function<void()> callback);
     double duration() const;
+
+    double volume() const;
+    void setVolume(double volume);
 };
 
 OMP_FFMPEG_NAMESPACE_END

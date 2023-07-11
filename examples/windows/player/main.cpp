@@ -50,6 +50,7 @@ int APIENTRY wWinMain(
         player->seek(600, []() {
             printf("done");
         });
+        player->setVolume(2);
     }
 
     MSG msg;

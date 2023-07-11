@@ -54,3 +54,11 @@ double MoviePlayer::duration() const {
     assert(_source->context());
     return _source->context()->duration * av_q2d(AVRational{ 1, AV_TIME_BASE });
 }
+
+double MoviePlayer::volume() const {
+    return _audioRenderer != nullptr ? _audioRenderer->volume() : 0;
+}
+
+void MoviePlayer::setVolume(double volume) {
+    if (_audioRenderer) _audioRenderer->setVolume(volume);
+}

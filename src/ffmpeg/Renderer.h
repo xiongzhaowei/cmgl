@@ -13,7 +13,7 @@ public:
         AVRational time_base,
         std::function<void(RefPtr<Frame>)> callback
     );
-    VideoRenderer(RefPtr<MovieBufferedConsumer> buffer, double time_base);
+    VideoRenderer(RefPtr<MovieBufferedConsumer> buffer, double time_base, std::function<void(RefPtr<Frame>)> callback);
     ~VideoRenderer();
 
     void sync(double pts);
@@ -37,6 +37,10 @@ public:
     AudioRenderer(RefPtr<Thread> thread, RefPtr<MovieBufferedConsumer> buffer, RefPtr<AudioConverter> converter, double time_base);
     ~AudioRenderer();
 
+    double volume() const;
+    void setVolume(double volume);
+
+    void fill(AVSampleFormat format, uint8_t* dst, uint8_t* src, size_t count, double volume);
     void fill(uint8_t* stream, int len);
     void attach(VideoRenderer* renderer);
     void play(bool state);
@@ -47,6 +51,7 @@ private:
     RefPtr<AudioConverter> _converter;
     RefPtr<VideoRenderer> _attached;
     uint32_t _device;
+    double _volume;
 };
 
 OMP_FFMPEG_NAMESPACE_END
