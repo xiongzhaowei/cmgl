@@ -32,6 +32,7 @@ public:
     bool available() const;
     bool read();
     bool seek(double time);
+    void skip(const std::function<bool(AVPacket*)>& skipWhere);
 
     RefPtr<StreamSubscription> listen(RefPtr<StreamConsumer<Packet>> consumer) override;
 };
@@ -96,6 +97,8 @@ public:
     bool available() const override;
 
     size_t size() const;
+    int64_t timestamp() const;
+
     void push(RefPtr<Frame> frame);
     RefPtr<Frame> pop();
     RefPtr<Frame> pop(int64_t timestamp);

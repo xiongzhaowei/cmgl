@@ -47,8 +47,8 @@ int APIENTRY wWinMain(
             PostMessage(w->handle(), WM_USER, 0, 0);
         });
         player->play(true);
-        player->seek(600, []() {
-            printf("done");
+        player->seek(100, [player](bool result) {
+            std::string t = std::to_string(double(player->time()) / player->duration());
         });
         player->setVolume(2);
     }

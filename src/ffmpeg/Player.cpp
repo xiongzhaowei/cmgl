@@ -40,18 +40,38 @@ void MoviePlayer::play(bool state) {
     }
 }
 
-void MoviePlayer::seek(double time, std::function<void()> callback) {
+void MoviePlayer::seek(double time, std::function<void(bool)> callback) {
     if (_thread == nullptr) return;
 
     _thread->runOnThread([this, time, callback]() {
-        if (_source->seek(time) && callback) {
-            _thread->runOnThread(callback);
+        bool result = _source->seek(time);
+        if (result) {
+            // 确保跳过一帧视频和所属的全部音频，避免seek完成后，播放时间不正确。
+            _source->skip([this](AVPacket* packet) { return packet->stream_index == _videoSource->stream()->index; });
+            _source->skip([this](AVPacket* packet) { return packet->stream_index == _videoSource->stream()->index; });
+            _audioRenderer->clear();
+            _videoRenderer->clear();
+        }
+        if (callback) {
+            if (result) {
+                _thread->runOnThread([callback, result]() { callback(result); });
+            } else {
+                callback(false);
+            }
         }
     });
 }
 
+double MoviePlayer::time() const {
+    int64_t timestamp = -1;
+    if (_audioRenderer != nullptr) timestamp = _audioRenderer->timestamp();
+    if (timestamp == -1 && _videoRenderer != nullptr) timestamp = _videoRenderer->timestamp();
+    if (timestamp != -1) return timestamp * av_q2d(AVRational{ 1, AV_TIME_BASE });
+    return 0;
+}
+
 double MoviePlayer::duration() const {
-    assert(_source->context());
+    if (_source == nullptr) return 0;
     return _source->context()->duration * av_q2d(AVRational{ 1, AV_TIME_BASE });
 }
 

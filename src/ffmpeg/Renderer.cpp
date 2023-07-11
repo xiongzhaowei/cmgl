@@ -43,7 +43,7 @@ RefPtr<AudioRenderer> AudioRenderer::from(RefPtr<MovieBufferedConsumer> buffer, 
         );
         break;
     }
-    RefPtr<AudioRenderer> renderer = new AudioRenderer(thread, buffer, converter, av_q2d(time_base) * frame_size);
+    RefPtr<AudioRenderer> renderer = new AudioRenderer(thread, buffer, converter, av_q2d(time_base));
     spec.userdata = renderer.value();
     renderer->_device = SDL_OpenAudioDevice(nullptr, 0, &spec, nullptr, 0);
     return (renderer->_device != 0) ? renderer : nullptr;
@@ -154,6 +154,18 @@ void AudioRenderer::play(bool state) {
     SDL_PauseAudioDevice(_device, state ? 0 : 1);
 }
 
+void AudioRenderer::clear() {
+    if (_buffer) _buffer->clear();
+}
+
+int64_t AudioRenderer::timestamp() const {
+    int64_t ts = _buffer->timestamp();
+    if (ts != -1) {
+        return ts * _time_base * AV_TIME_BASE;
+    }
+    return -1;
+}
+
 RefPtr<VideoRenderer> VideoRenderer::from(
     RefPtr<MovieBufferedConsumer> buffer,
     AVRational time_base,
@@ -175,4 +187,16 @@ void VideoRenderer::sync(double pts) {
     while (RefPtr<Frame> frame = _buffer->pop(timestamp)) {
         _callback(frame);
     }
+}
+
+void VideoRenderer::clear() {
+    if (_buffer) _buffer->clear();
+}
+
+int64_t VideoRenderer::timestamp() const {
+    int64_t ts = _buffer->timestamp();
+    if (ts != -1) {
+        return ts * _time_base * AV_TIME_BASE;
+    }
+    return -1;
 }

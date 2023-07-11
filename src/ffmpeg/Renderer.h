@@ -17,6 +17,8 @@ public:
     ~VideoRenderer();
 
     void sync(double pts);
+    void clear();
+    int64_t timestamp() const;
 private:
     double _time_base;
     RefPtr<MovieBufferedConsumer> _buffer;
@@ -44,12 +46,14 @@ public:
     void fill(uint8_t* stream, int len);
     void attach(VideoRenderer* renderer);
     void play(bool state);
+    void clear();
+    int64_t timestamp() const;
 private:
     double _time_base;
-    RefPtr<Thread> _thread;
     RefPtr<MovieBufferedConsumer> _buffer;
     RefPtr<AudioConverter> _converter;
     RefPtr<VideoRenderer> _attached;
+    RefPtr<Thread> _thread;
     uint32_t _device;
     double _volume;
 };

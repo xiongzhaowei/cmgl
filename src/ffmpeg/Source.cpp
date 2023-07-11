@@ -79,7 +79,19 @@ bool MovieSource::seek(double time) {
 	if (_context == nullptr) return false;
 
 	int64_t ts = std::clamp<int64_t>(int64_t(time * AV_TIME_BASE), 0, _context->duration);
-	return Error::verify(avformat_seek_file(_context, -1, 0, ts, _context->duration, 0), __FUNCSIG__, __LINE__);
+	bool result = Error::verify(avformat_seek_file(_context, -1, 0, ts, _context->duration, 0), __FUNCSIG__, __LINE__);
+	if (_context->pb) avio_flush(_context->pb);
+	avformat_flush(_context);
+	return result;
+}
+
+void MovieSource::skip(const std::function<bool(AVPacket*)>& skipWhere) {
+	while (Error::verify(av_read_frame(_context, _packet->packet()), __FUNCSIG__, __LINE__)) {
+		_controller->add(_packet);
+		bool result = skipWhere(_packet->packet());
+		_packet->reset();
+		if (result) break;
+	}
 }
 
 RefPtr<StreamSubscription> MovieSource::listen(RefPtr<StreamConsumer<Packet>> consumer) {
@@ -249,6 +261,11 @@ bool MovieBufferedConsumer::available() const {
 size_t MovieBufferedConsumer::size() const {
 	std::lock_guard<std::mutex> lock(_mutex);
 	return _list.size();
+}
+
+int64_t MovieBufferedConsumer::timestamp() const {
+	std::lock_guard<std::mutex> lock(_mutex);
+	return _list.empty() ? -1 : _list.front()->timestamp();
 }
 
 void MovieBufferedConsumer::push(RefPtr<Frame> frame) {
