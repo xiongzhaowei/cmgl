@@ -3,6 +3,8 @@ project(player LANGUAGES CXX)
 
 add_executable(${PROJECT_NAME} WIN32
   "main.cpp"
+  "http.cpp"
+  "http.h"
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 target_compile_options(${PROJECT_NAME} PRIVATE /W4 /WX)
