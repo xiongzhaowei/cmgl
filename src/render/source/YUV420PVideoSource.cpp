@@ -22,6 +22,30 @@ void YUV420PVideoSource::unload(RefPtr<RenderContext> context) {
     _texture3 = nullptr;
 }
 
+void YUV420PVideoSource::clear(uint8_t red, uint8_t green, uint8_t blue) {
+    std::lock_guard<std::mutex> lock(_lock);
+
+    int32_t width = 16;
+    int32_t height = 16;
+    int32_t size = width * height;
+    vec4 color = Renderer::kColorConversionBT601FullRange / vec4(red / 255.0, green / 255.0, blue / 255.0, 1);
+    color *= 255;
+
+    _pixels1.resize(size);
+    memset(_pixels1.data(), color.r, size);
+
+    size = (((size - 1) | 3) + 1) >> 2;
+
+    _pixels2.resize(size);
+    memset(_pixels2.data(), color.g, size);
+
+    _pixels3.resize(size);
+    memset(_pixels3.data(), color.b, size);
+
+    _size = ivec2(width, height);
+    _isNeedsUpdate = true;
+}
+
 void YUV420PVideoSource::update(const AVFrame *frame) {
     assert(frame != nullptr);
 
@@ -59,6 +83,7 @@ void YUV420PVideoSource::draw(
     const vec2 &size,
     float alpha
 ) {
+    if (_size.x * _size.y == 0) return;
     if (_isNeedsUpdate) {
         std::lock_guard<std::mutex> lock(_lock);
 

@@ -12,6 +12,7 @@ OMP_RENDER_NAMESPACE_BEGIN
 struct YUV420PVideoSource : public VideoSource {
     void load(RefPtr<RenderContext> context) override;
     void unload(RefPtr<RenderContext> context) override;
+    void clear(uint8_t red, uint8_t green, uint8_t blue);
     void update(const AVFrame *frame) override;
     bool support(const Type &type) override;
     void draw(
