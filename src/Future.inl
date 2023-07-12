@@ -8,28 +8,28 @@ OMP_NAMESPACE_BEGIN
 
 template <typename T>
 class _AsyncFuture : public Future<T> {
-    T _result;
+    Type _result;
     bool _isCompleted = false;
-    std::list<std::function<void(T)>> _callbacks;
+    std::list<std::function<void(Type)>> _callbacks;
 public:
     _AsyncFuture(Thread* thread) : Future<T>(thread) {}
 
     bool isCompleted() const { return _isCompleted; }
 
-    void _whenCompleted(T result) {
+    void _whenCompleted(Type result) {
         RefPtr<_AsyncFuture<T>> self = this;
         this->_thread->runOnThread([self, result]() {
             self->_result = result;
             self->_isCompleted = true;
 
-            std::list<std::function<void(T)>> callbacks = std::move(self->_callbacks);
-            for (std::function<void(T)>& callback : callbacks) {
+            std::list<std::function<void(Type)>> callbacks = std::move(self->_callbacks);
+            for (std::function<void(Type)>& callback : callbacks) {
                 callback(result);
             }
         });
     }
 
-    void then(const std::function<void(T)>& onValue) override {
+    void then(const std::function<void(Type)>& onValue) override {
         RefPtr<_AsyncFuture<T>> self = this;
         this->_thread->runOnThread([onValue, self]() {
             if (self->_isCompleted) {
@@ -48,7 +48,7 @@ public:
     _AsyncCompleter(Thread* thread) : _future(new _AsyncFuture<T>(thread)) {}
     RefPtr<Future<T>> future() const { return _future; }
     bool isCompleted() const { return _future->isCompleted(); }
-    void complete(T value) { _future->_whenCompleted(value); }
+    void complete(typename Future<T>::Type value) { _future->_whenCompleted(value); }
 };
 
 template <typename T>
@@ -56,20 +56,20 @@ Future<T>::Future(Thread* thread) : _thread(thread) {}
 
 template <typename T>
 template <typename R>
-RefPtr<Future<R>> Future<T>::then(const std::function<R(T)>& onValue) {
+RefPtr<Future<R>> Future<T>::then(const std::function<typename Future<R>::Type(Type)>& onValue) {
     RefPtr<_AsyncFuture<R>> future = new _AsyncFuture<R>(_thread);
-    then([future, onValue](T value) { future->_whenCompleted(onValue(value)); });
+    then([future, onValue](Type value) { future->_whenCompleted(onValue(value)); });
     return future;
 }
 
 template <typename T>
 template <typename R>
-RefPtr<Future<R>> Future<T>::then(const std::function<RefPtr<Future<R>>(T)>& onValue) {
+RefPtr<Future<R>> Future<T>::then(const std::function<RefPtr<Future<R>>(Type)>& onValue) {
     RefPtr<_AsyncFuture<R>> future = new _AsyncFuture(_thread);
-    then([future](T value) {
+    then([future](Type value) {
         RefPtr<Future<R>> result = onValue(value);
         if (result) {
-            result->then([future](T value) { future->_whenCompleted(value); });
+            result->then([future](Type value) { future->_whenCompleted(value); });
         } else {
             future->_whenCompleted(nullptr);
         }
@@ -78,9 +78,9 @@ RefPtr<Future<R>> Future<T>::then(const std::function<RefPtr<Future<R>>(T)>& onV
 }
 
 template <typename T>
-RefPtr<Future<T>> Future<T>::value(T value, Thread* thread) {
+RefPtr<Future<T>> Future<T>::value(Type value, Thread* thread) {
     if (thread == nullptr) thread = Thread::current();
-    if (thread == nullptr) thread = Thread::events();
+    if (thread == nullptr) thread = Thread::future();
     RefPtr<_AsyncFuture<T>> future = new _AsyncFuture<T>(thread);
     future->_whenCompleted(value);
     return future;
@@ -89,7 +89,7 @@ RefPtr<Future<T>> Future<T>::value(T value, Thread* thread) {
 template <typename T>
 RefPtr<Completer<T>> Completer<T>::async(Thread* thread) {
     if (thread == nullptr) thread = Thread::current();
-    if (thread == nullptr) thread = Thread::events();
+    if (thread == nullptr) thread = Thread::future();
     return new _AsyncCompleter<T>(thread);
 }
 

@@ -13,6 +13,7 @@ public:
     virtual uint8_t* buffer() const = 0;
     virtual int32_t bufferSize() const = 0;
     virtual int read(uint8_t *buf, int buf_size) = 0;
+    virtual int write(const uint8_t* buf, int buf_size) = 0;
     virtual int64_t seek(int64_t offset, int whence) = 0;
 };
 
