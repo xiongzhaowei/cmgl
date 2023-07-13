@@ -23,6 +23,7 @@ public:
 class PlatformWindow : public Window {
 	uint32_t _borderSize = 0;
 	ui::Size _minTrackSize = { 0, 0 };
+	RefPtr<render::RGBAVideoSource> _windowLayer;
 	RefPtr<render::egl::EGLRenderContext> _eglContext;
 	RefPtr<render::egl::EGLWindow> _eglWindow;
 public:

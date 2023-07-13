@@ -32,12 +32,17 @@ int APIENTRY wWinMain(
     wheel::RefPtr<wheel::ui::windows::PlatformWindow> w = new wheel::ui::windows::PlatformWindow(wheel::ui::windows::PlatformWindow::Style::create(TEXT("Player"), TEXT(""), true, true, true, true, false, false));
     if (w->create(1024, 768, nullptr, true)) {
         wheel::RefPtr<wheel::render::YUV420PVideoSource> source = new wheel::render::YUV420PVideoSource;
-        w->render([w, source](wheel::render::egl::EGLRenderContext* context) {
-            context->addSource(source);
+        wheel::RefPtr<wheel::render::RenderLayer> layer = new wheel::render::RenderLayer;
+        layer->setSource(source);
+        layer->setPosition(glm::vec2(100, 100));
+        layer->setSize(glm::vec2(800, 600));
+        w->render([w, layer](wheel::render::egl::EGLRenderContext* context) {
+            context->addSource(layer);
         });
+
         wheel::RefPtr<wheel::ui::windows::NCHitTestView> caption = new wheel::ui::windows::NCHitTestView;
         caption->setFrame(wheel::ui::Rect(0, 0, 1024, 32));
-        caption->setBackgroundColor(wheel::ui::Color(0xFFFFFFFF));
+        caption->setBackgroundColor(wheel::ui::Color(0xFF00FFFF));
         caption->setCode(HTCAPTION);
         w->addSubview(caption);
         w->showWindow(SW_SHOW);

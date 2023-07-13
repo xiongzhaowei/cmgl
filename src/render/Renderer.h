@@ -20,6 +20,7 @@ struct Renderer : public Resource {
     } Name;
 
     static const mat4 kColorConversionNone;
+    static const mat4 kColorConversionExchangeRedAndBlue;
     static const mat4 kColorConversionBT601;
     static const mat4 kColorConversionBT601FullRange;
     static const mat4 kColorConversionBT709;

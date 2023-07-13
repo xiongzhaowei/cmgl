@@ -48,11 +48,6 @@ struct VideoSource : public DataSource {
     VideoSource();
     vec2 size() const override;
 
-#if __cplusplus > 201100
-    [[deprecated]] // 此方法仅在RGB模式下有效，将来会被删除
-#endif
-    virtual void update(int width, int height, const void *pixels);
-
     virtual void update(const AVFrame *frame) = 0;
     virtual bool support(const Type &type) = 0;
 

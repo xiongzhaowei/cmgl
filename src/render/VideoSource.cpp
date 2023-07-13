@@ -13,8 +13,6 @@ vec2 VideoSource::size() const {
     return _size;
 }
 
-void VideoSource::update(int width, int height, const void *pixels) {}
-
 #ifdef __ANDROID__
 VideoSource *VideoSource::fromObject(JNIEnv *env, jobject obj) {
     jclass objectClass = env->GetObjectClass(obj);

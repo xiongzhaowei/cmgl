@@ -16,6 +16,13 @@ const mat4 Renderer::kColorConversionNone = mat4(
     0.0,    0.0,    0.0,    1.0
 );
 
+const mat4 Renderer::kColorConversionExchangeRedAndBlue = mat4(
+    0.0, 0.0, 1.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
+    1.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0, 1.0
+);
+
 // BT.709, which is the standard for HDTV.
 const mat4 Renderer::kColorConversionBT709 = mat4(
     1.164,  1.164,  1.164,  0.0,

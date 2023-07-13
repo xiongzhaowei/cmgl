@@ -5,6 +5,8 @@ static_assert(GDIPVER == 0x0110)
 #define GDIPVER 0x0110
 #endif
 
+#include <Windows.h>
+#include <gdiplus.h>
 #include "defines.h"
 
 #pragma comment(lib, "gdiplus.lib")
@@ -92,6 +94,11 @@ Graphics::~Graphics() {
 		delete m_pGraphics;
 		m_pGraphics = nullptr;
 	}
+}
+
+CComPtr<Graphics> Graphics::FromImage(Image* image) {
+	CComPtr<Token> spToken = Token::Get();
+	return new Graphics(Gdiplus::Graphics::FromImage(image->m_pImage));
 }
 
 CComPtr<Graphics> Graphics::FromWindow(HWND hWnd) {
@@ -241,6 +248,10 @@ static Gdiplus::Bitmap* CreateShadow(Gdiplus::Bitmap* bitmap, int radius, float 
 	delete clone;
 
 	return shadow;
+}
+
+CComPtr<Image> Image::Create(int width, int height) {
+	return new Image(new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB));
 }
 
 CComPtr<Image> Image::CreateShadow(CComPtr<Image> image, int radius, float opacity) {
@@ -636,4 +647,17 @@ void gdiplus::Layer::removeFromSuperlayer() {
 
 void gdiplus::Layer::paint(HDC hDC) {
 	_layer->Paint(hDC);
+}
+
+void gdiplus::Layer::paint(RefPtr<render::RGBAVideoSource> source) const {
+	CComPtr<Token> spToken = Token::Get();
+
+	ui::Size size = bounds().size;
+	if (size.width * size.height < 1) return;
+
+	CComPtr<Matrix> matrix = new Matrix;
+
+	CComPtr<Image> image = Image::Create((int32_t)size.width, (int32_t)size.height);
+	_layer->Paint(Graphics::FromImage(image), matrix);
+	source->update(image->Bitmap());
 }

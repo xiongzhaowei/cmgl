@@ -114,6 +114,8 @@ bool PlatformWindow::create(int32_t width, int32_t height, PlatformWindow* paren
 
 		_eglContext->load();
 		_eglContext->setTarget(_eglWindow);
+		_windowLayer = new render::RGBAVideoSource;
+		_eglContext->addSource(_windowLayer);
 	}
 	return true;
 }
@@ -277,6 +279,7 @@ std::optional<LRESULT> PlatformWindow::onPaint(const MSG& event) {
 	if (_eglContext) {
 		BeginPaint(_hWnd, &ps);
 		EndPaint(_hWnd, &ps);
+		if (_layer) _layer.cast<gdiplus::Layer>()->paint(_windowLayer);
 
 		_eglContext->render();
 	} else {

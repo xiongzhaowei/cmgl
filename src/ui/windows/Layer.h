@@ -60,11 +60,13 @@ public:
 	Image(Gdiplus::Bitmap* pImage);
 	~Image();
 
+	Gdiplus::Bitmap* Bitmap() const { return m_pImage; }
 	float Width() const { return (float)m_pImage->GetWidth(); }
 	float Height() const { return (float)m_pImage->GetHeight(); }
 
 	static CComPtr<Image> FromFile(LPCWSTR lpszPath);
 	static CComPtr<Image> FromHICON(HICON hIcon);
+	static CComPtr<Image> Create(int width, int height);
 	static CComPtr<Image> CreateShadow(CComPtr<Image> image, int radius, float opacity);
 
 	friend class Graphics;
@@ -103,6 +105,7 @@ public:
 	bool Clear(COLORREF color);
 	void SetClip(Region* region);
 
+	static CComPtr<Graphics> FromImage(Image* image);
 	static CComPtr<Graphics> FromWindow(HWND hWnd);
 	static CComPtr<Graphics> FromHDC(HDC hDC);
 };
@@ -247,6 +250,7 @@ public:
 	void removeFromSuperlayer() override;
 
 	void paint(HDC hDC);
+	void paint(RefPtr<render::RGBAVideoSource> source) const;
 };
 
 OMP_UI_WINDOWS_NAMESPACE_END

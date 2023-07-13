@@ -24,10 +24,7 @@ struct RGBAVideoSource : public VideoSource {
         float alpha
     ) override;
 
-#if __cplusplus > 201100
-    [[deprecated]]
-#endif
-    virtual void update(int width, int height, const void *pixels) override;
+    void update(int width, int height, const void *pixels);
 #if defined(_WIN32) && defined(_GDIPLUS_H)
     void update(Gdiplus::Bitmap* bitmap);
 #endif

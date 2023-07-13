@@ -99,7 +99,7 @@ void RGBAVideoSource::draw(
         _isNeedsUpdate = false;
     }
 
-    context->draw(Renderer::RGBA, framebuffer, globalMatrix, localMatrix, clipMatrix, Renderer::kColorConversionNone, size, alpha, _texture->data());
+    context->draw(Renderer::RGBA, framebuffer, globalMatrix, localMatrix, clipMatrix, Renderer::kColorConversionExchangeRedAndBlue, size, alpha, _texture->data());
 }
 
 RefPtr<Texture> RGBAVideoSource::texture() const {
