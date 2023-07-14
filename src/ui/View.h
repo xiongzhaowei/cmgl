@@ -1,6 +1,14 @@
 
 OMP_UI_NAMESPACE_BEGIN
 
+class Image : public Object {
+public:
+	virtual float Width() const = 0;
+	virtual float Height() const = 0;
+
+	static RefPtr<Image> file(const std::wstring& path);
+};
+
 class Responder : public Object {
 public:
 	virtual Responder* next() const = 0;
@@ -44,12 +52,15 @@ public:
 	virtual float shadowRadius() const = 0;
 	virtual void setShadowRadius(float radius) = 0;
 
-	virtual void setNeedsDisplay() = 0;
+	virtual void* content() const = 0;
 	virtual void setContent(void* image) = 0;
+
+	virtual void setNeedsDisplay() = 0;
 
 	virtual void addLayer(Layer* layer) = 0;
 	virtual void removeFromSuperlayer() = 0;
 
+	virtual void drawText(const std::wstring& text, float fontSize, Color color) = 0;
 	static Layer* createLayer();
 };
 
@@ -63,6 +74,7 @@ protected:
 	std::vector<RefPtr<View>> _subviews;
 	bool _isMouseEnabled = true;
 	bool _isKeyboardEnabled = true;
+	bool _isNeedsLayout = false;
 public:
 	virtual Layer* makeLayer() { return Layer::createLayer(); }
 	virtual Layer* layer() const { return _layer; }
@@ -130,24 +142,151 @@ public:
 	virtual void addSubview(View* view);
 	virtual void removeFromSuperview();
 
+	virtual void setNeedsLayout();
+	virtual void layoutIfNeeded();
+	virtual void layoutSubviews();
+
 	virtual bool isFocused() const;
 	virtual void setFocus();
 	virtual void killFocus();
 
-	virtual std::optional<intptr_t> handleMouseEvent(const MouseEvent& event);
-	virtual std::optional<intptr_t> handleKeyboardEvent(const KeyboardEvent& event);
+	virtual void onMouseEnter();
+	virtual void onMouseHover();
+	virtual void onMouseLeave();
+	virtual void onMouseMove(const MouseEvent& event);
+	virtual void onMouseWheel(const MouseEvent& event);
+	virtual void onMouseDown(const MouseEvent& event);
+	virtual void onMouseUp(const MouseEvent& event);
+	virtual void onDoubleClick(const MouseEvent& event);
+};
+
+class Label : public View {
+	Color _textColor;
+	std::wstring _text;
+	float _fontSize;
+public:
+	Label();
+
+	float fontSize() const;
+	virtual void setFontSize(float fontSize);
+
+	virtual std::wstring text() const;
+	virtual void setText(const std::wstring& text);
+
+	virtual Color textColor() const;
+	virtual void setTextColor(Color color);
+
+	void layoutSubviews() override;
+};
+
+class ImageView : public View {
+public:
+	ImageView();
+	virtual RefPtr<Image> image() const;
+	virtual void setImage(RefPtr<Image> image);
+};
+
+class Button : public View {
+protected:
+	RefPtr<ImageView> _imageView;
+	RefPtr<Image> _stateImages[3];
+	bool _hoverState = false;
+	bool _pressedState = false;
+	std::list<std::function<void()>> _clickedActions;
+public:
+	enum class State {
+		normal,
+		hover,
+		pressed
+	};
+
+	Button();
+
+	void onMouseEnter() override;
+	void onMouseLeave() override;
+	void onMouseDown(const MouseEvent& event) override;
+	void onMouseUp(const MouseEvent& event) override;
+	void onDoubleClick(const MouseEvent& event) override;
+
+	virtual void setImage(State state, RefPtr<Image> image);
+	virtual void onClicked(std::function<void()>);
+
+	void layoutSubviews() override;
+};
+
+class Progress : public View {
+protected:
+	int64_t _maxValue;
+	int64_t _minValue;
+	int64_t _value;
+	RefPtr<ImageView> _foregroundImageView;
+	RefPtr<ImageView> _backgroundImageView;
+public:
+	Progress();
+
+	virtual int64_t maxValue() const;
+	virtual void setMaxValue(int64_t value);
+
+	virtual int64_t minValue() const;
+	virtual void setMinValue(int64_t value);
+
+	virtual int64_t value() const;
+	virtual void setValue(int64_t value);
+
+	virtual RefPtr<ImageView> foregroundImageView();
+	virtual RefPtr<ImageView> backgroundImageView();
+
+	virtual void setForegroundImage(RefPtr<Image> image);
+	virtual void setBackgroundImage(RefPtr<Image> image);
+
+	void layoutSubviews() override;
+};
+
+class Slider : public Progress {
+	std::list<std::function<void()>> _valueChangedActions;
+public:
+
+	void onMouseUp(const MouseEvent& event) override;
+	void onValueChanged(std::function<void()>);
 };
 
 class Window : public View {
 	WeakPtr<View> _captureView;
 	WeakPtr<View> _focusView;
 public:
+	Window* window() const { return (Window*)this; }
 	virtual View* hitTest(float x, float y) override;
 	virtual View* focusView() const;
 
-	virtual std::optional<intptr_t> handleNativeEvent(const NativeEvent& event);
+	virtual void* handle() const = 0;
+	virtual bool create(int32_t width, int32_t height, Window* parent = nullptr, bool isGLESEnabled = false) = 0;
+	virtual bool render(std::function<void(render::egl::EGLRenderContext*)> callback) = 0;
+	virtual void show() = 0;
+	virtual void hide() = 0;
+	virtual RefPtr<render::RenderSource> renderLayer() = 0;
+	virtual void setNeedsDisplay() = 0;
+	virtual std::optional<intptr_t> handleMouseEvent(const MouseEvent& event) = 0;
+	virtual std::optional<intptr_t> handleKeyboardEvent(const KeyboardEvent& event) = 0;
+	virtual std::optional<intptr_t> handleNativeEvent(const NativeEvent& event) = 0;
 
 	friend class View;
+};
+
+class WindowController : public Object {
+protected:
+	RefPtr<Window> _window;
+public:
+	WindowController() = default;
+
+	Window* window();
+
+	virtual void load();
+	virtual void unload();
+
+	virtual void onInitWindow();
+	virtual void onDestroyWindow();
+
+	virtual void layoutWindow();
 };
 
 OMP_UI_NAMESPACE_END

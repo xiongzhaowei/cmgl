@@ -16,6 +16,6 @@
 #define OMP_UI_WINDOWS_NAMESPACE_PREFIX     OMP_UI_NAMESPACE_PREFIX windows ::
 #define OMP_UI_WINDOWS_USING_NAMESPACE      OMP_UI_USING_NAMESPACE using namespace OMP_UI_NAMESPACE_PREFIX windows;
 
-#include "Pointer.h"
+//#include "Pointer.h"
 #include "Layer.h"
 #include "Window.h"

@@ -96,6 +96,7 @@ void RGBAVideoSource::draw(
         std::lock_guard<std::mutex> lock(_lock);
 
         _texture->setImage(_size.x, _size.y, _pixels.data(), Texture::RGBA);
+        _pixels = std::vector<uint8_t>();
         _isNeedsUpdate = false;
     }
 

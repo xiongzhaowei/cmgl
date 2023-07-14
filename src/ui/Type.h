@@ -43,8 +43,9 @@ typedef struct tagMSG NativeEvent;
 
 struct MouseEvent {
     const NativeEvent& native;
+    Point pt;
 
-    MouseEvent(const NativeEvent& native);
+    MouseEvent(const NativeEvent& native, float x, float y);
 };
 
 struct KeyboardEvent {

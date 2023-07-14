@@ -28,7 +28,7 @@ Rect::Rect(float x, float y, float width, float height) : origin(x, y), size(wid
 }
 
 
-MouseEvent::MouseEvent(const NativeEvent& native) : native(native) {
+MouseEvent::MouseEvent(const NativeEvent& native, float x, float y) : native(native), pt(x, y) {
 }
 
 KeyboardEvent::KeyboardEvent(const NativeEvent& native) : native(native) {

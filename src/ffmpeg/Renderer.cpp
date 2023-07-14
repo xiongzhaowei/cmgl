@@ -54,7 +54,7 @@ AudioRenderer::AudioRenderer(
     RefPtr<MovieBufferedConsumer> buffer,
     RefPtr<AudioConverter> converter,
     double time_base
-) : _thread(thread), _buffer(buffer), _converter(converter), _time_base(time_base), _device(0) {
+) : _thread(thread), _buffer(buffer), _converter(converter), _time_base(time_base), _device(0), _volume(1) {
 
 }
 
