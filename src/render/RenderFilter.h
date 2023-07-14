@@ -7,6 +7,8 @@
 OMP_RENDER_NAMESPACE_BEGIN
 
 struct RenderSource : public Resource {
+    virtual bool enabled() const = 0;
+    virtual void setEnabled(bool enabled) = 0;
     virtual vec2 size() const = 0;
     virtual void render(RefPtr<RenderContext> context, RefPtr<Framebuffer> framebuffer, const mat4 &globalMatrix) = 0;
 };
@@ -32,6 +34,8 @@ protected:
 };
 
 struct DataSource : public RenderSource {
+    bool enabled() const override;
+    void setEnabled(bool enabled) override;
     void render(RefPtr<RenderContext> context, RefPtr<Framebuffer> framebuffer, const mat4 &globalMatrix) override;
 
     virtual void draw(
@@ -44,6 +48,8 @@ struct DataSource : public RenderSource {
         float alpha
     ) = 0;
 
+protected:
+    bool _enabled = true;
 };
 
 OMP_RENDER_NAMESPACE_END

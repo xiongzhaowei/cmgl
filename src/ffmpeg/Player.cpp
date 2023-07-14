@@ -8,36 +8,106 @@ OMP_FFMPEG_USING_NAMESPACE
 
 RefPtr<MoviePlayer> MoviePlayer::file(const std::string& path, RefPtr<MovieThread> thread) {
     RefPtr<MoviePlayer> player = new MoviePlayer;
+    return player->open(path, thread) ? player : nullptr;
+}
 
-    player->_source = new MovieSource;
-    if (!player->_source->open(path)) return nullptr;
+bool MoviePlayer::open(RefPtr<MovieFile> file, RefPtr<MovieThread> thread) {
+    RefPtr<MovieSource> source = new MovieSource;
+    if (!source->open(file)) return false;
 
-    player->_audioSource = MovieSourceStream::audio(player->_source);
-    player->_videoSource = MovieSourceStream::video(player->_source);
-    if (player->_audioSource == nullptr && player->_videoSource == nullptr) return nullptr;
+    RefPtr<MovieSourceStream> audioSource = MovieSourceStream::audio(source);
+    RefPtr<MovieSourceStream> videoSource = MovieSourceStream::video(source);
+    if (audioSource == nullptr && videoSource == nullptr) return false;
 
-    player->_thread = thread != nullptr ? thread : new MovieThread;
-    player->_thread->add(player->_source);
+    _source = source;
+    _audioSource = audioSource;
+    _videoSource = videoSource;
+    _thread = thread != nullptr ? thread : new MovieThread;
+    _thread->add(_source);
 
-    return player;
+    return true;
+}
+
+bool MoviePlayer::open(const std::string& path, RefPtr<MovieThread> thread) {
+    RefPtr<MovieSource> source = new MovieSource;
+    if (!source->open(path)) return false;
+
+    RefPtr<MovieSourceStream> audioSource = MovieSourceStream::audio(source);
+    RefPtr<MovieSourceStream> videoSource = MovieSourceStream::video(source);
+    if (audioSource == nullptr && videoSource == nullptr) return false;
+
+    _source = source;
+    _audioSource = audioSource;
+    _videoSource = videoSource;
+    _thread = thread != nullptr ? thread : new MovieThread;
+    _thread->add(_source);
+
+    return true;
+}
+
+void MoviePlayer::close() {
+    _thread->runOnThread([this]() {
+        _audioRenderer->play(false);
+        _audioRenderer->attach(nullptr);
+        _thread->remove(_source);
+        _thread = nullptr;
+        _source->close();
+        _source = nullptr;
+        _audioRenderer = nullptr;
+        _videoRenderer = nullptr;
+        _audioSource = nullptr;
+        _videoSource = nullptr;
+    });
+}
+
+bool MoviePlayer::ready() const {
+    return _source != nullptr;
+}
+
+bool MoviePlayer::isPlaying() const {
+    return _isPlaying;
+}
+
+int32_t MoviePlayer::width() const {
+    return _videoSource->context()->width;
+}
+
+int32_t MoviePlayer::height() const {
+    return _videoSource->context()->height;
 }
 
 void MoviePlayer::bind(AVPixelFormat format, std::function<void(RefPtr<Frame>)> render) {
     if (AVStream* audioStream = _source->stream(AVMEDIA_TYPE_AUDIO)) {
-        RefPtr<MovieBufferedConsumer> buffer = new MovieBufferedConsumer(_audioSource, 5);
+        RefPtr<MovieBufferedConsumer> buffer = new MovieBufferedConsumer(_audioSource, _maxCacheFrames);
         _audioRenderer = AudioRenderer::from(buffer, audioStream->time_base, _thread, (AVSampleFormat)audioStream->codecpar->format, audioStream->codecpar->ch_layout, audioStream->codecpar->sample_rate, audioStream->codecpar->frame_size);
     }
     if (AVStream* videoStream = _source->stream(AVMEDIA_TYPE_VIDEO)) {
-        RefPtr<MovieBufferedConsumer> buffer = new MovieBufferedConsumer(_videoSource->convert(format), 5);
+        RefPtr<MovieBufferedConsumer> buffer = new MovieBufferedConsumer(_videoSource->convert(format), _maxCacheFrames);
         _videoRenderer = VideoRenderer::from(buffer, videoStream->time_base, render);
     }
     if (_audioRenderer && _videoRenderer) _audioRenderer->attach(_videoRenderer);
 }
 
 void MoviePlayer::play(bool state) {
+    _isPlaying = state;
     if (_audioRenderer) {
         _thread->runOnThread([_audioRenderer = _audioRenderer, state]() { _audioRenderer->play(state); });
     }
+}
+
+void MoviePlayer::seek(double time) {
+    if (_thread == nullptr) return;
+
+    _thread->runOnThread([this, time]() {
+        bool result = _source->seek(time);
+        if (result) {
+            // 确保跳过一帧视频和所属的全部音频，避免seek完成后，播放时间不正确。
+            _source->skip([this](AVPacket* packet) { return packet->stream_index == _videoSource->stream()->index; });
+            _source->skip([this](AVPacket* packet) { return packet->stream_index == _videoSource->stream()->index; });
+            _audioRenderer->clear();
+            _videoRenderer->clear();
+        }
+    });
 }
 
 void MoviePlayer::seek(double time, std::function<void(bool)> callback) {

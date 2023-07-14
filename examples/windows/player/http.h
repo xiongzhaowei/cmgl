@@ -158,8 +158,7 @@ public:
     WinHTTPVirtualFile(RefPtr<MovieFile> cache, RefPtr<Thread> thread, RefPtr<WinHTTPWebsite> website, RefPtr<WinHTTPRequest> request, size_t bufferSize) : _cache(cache), _thread(thread), _website(website), _request(request), _bufferSize(bufferSize) {
 
     }
-    uint8_t* buffer() const override { return _buffer.get(); }
-    int32_t bufferSize() const override { return (int32_t)_bufferSize; }
+    size_t bufferSize() const override { return _bufferSize; }
     int read(uint8_t* buf, int buf_size) override {
         return 0;
     }

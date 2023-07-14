@@ -12,8 +12,8 @@ MovieSource::MovieSource() : _packet(new Packet), _controller(StreamController<P
 bool MovieSource::open(RefPtr<MovieFile> file) {
 	AVFormatContext* context = avformat_alloc_context();
 	context->pb = avio_alloc_context(
-		file->buffer(),
-		file->bufferSize(),
+		(uint8_t*)av_malloc(file->bufferSize()),
+		(int32_t)file->bufferSize(),
 		0,
 		file.value(),
 		[](void *opaque, uint8_t *buf, int buf_size) { return static_cast<MovieFile*>(opaque)->read(buf, buf_size); },

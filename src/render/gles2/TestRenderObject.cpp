@@ -18,6 +18,7 @@ void TestRenderObject::unload(RefPtr<RenderContext> context) {
 }
 
 void TestRenderObject::render(RefPtr<RenderContext> context, RefPtr<Framebuffer> framebuffer, const mat4 &globalMatrix) {
+    if (!enabled()) return;
     GL_ERROR(glClearColor(0.5f, 0.5f, 1.0f, 1.0f));
     GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 }

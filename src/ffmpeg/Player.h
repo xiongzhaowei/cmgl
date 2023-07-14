@@ -7,14 +7,26 @@
 OMP_FFMPEG_NAMESPACE_BEGIN
 
 class MoviePlayer : public Object {
+    const uint32_t _maxCacheFrames = 2;
     RefPtr<MovieThread> _thread;
     RefPtr<MovieSource> _source;
     RefPtr<MovieSourceStream> _audioSource;
     RefPtr<MovieSourceStream> _videoSource;
     RefPtr<AudioRenderer> _audioRenderer;
     RefPtr<VideoRenderer> _videoRenderer;
+    bool _isPlaying = false;
 public:
     static RefPtr<MoviePlayer> file(const std::string& path, RefPtr<MovieThread> thread = nullptr);
+
+    bool open(RefPtr<MovieFile> file, RefPtr<MovieThread> thread = nullptr);
+    bool open(const std::string& path, RefPtr<MovieThread> thread = nullptr);
+    void close();
+
+    bool ready() const;
+    bool isPlaying() const;
+
+    int32_t width() const;
+    int32_t height() const;
 
     /**
      * @brief 绑定UI渲染，按照format指定的格式输出所有视频帧。使用者应在render回调中通知画面刷新。
@@ -34,6 +46,7 @@ public:
      * @param time 需要seek的目标时间，单位为秒。
      * @param callback 完成后第一时间的回调。
     */
+    void seek(double time);
     void seek(double time, std::function<void(bool)> callback);
 
     /**

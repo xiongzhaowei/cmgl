@@ -90,6 +90,9 @@ void YUV420PVideoSource::draw(
         _texture1->setImage(_size.x, _size.y, _pixels1.data(), Texture::Alpha);
         _texture2->setImage((_size.x - 1) / 2 + 1, (_size.y - 1) / 2 + 1, _pixels2.data(), Texture::Alpha);
         _texture3->setImage((_size.x - 1) / 2 + 1, (_size.y - 1) / 2 + 1, _pixels3.data(), Texture::Alpha);
+        _pixels1 = std::vector<uint8_t>();
+        _pixels2 = std::vector<uint8_t>();
+        _pixels3 = std::vector<uint8_t>();
         _isNeedsUpdate = false;
     }
 
