@@ -14,7 +14,7 @@ namespace gdiplus {
     class Layer;
 }
 
-class gdiplus::Token : public SupportWeak<Token> {
+class gdiplus::Token : public Object {
 	ULONG_PTR m_hToken = 0;
 	Gdiplus::GdiplusStartupInput m_input = { 0 };
 public:
@@ -22,10 +22,11 @@ public:
 	~Token();
 
 	static WeakPtr<Token> shared;
-	static CComPtr<Token> Get();
+	static RefPtr<Token> Get();
 };
 
-class gdiplus::Matrix : public RefCounted<Matrix> {
+class gdiplus::Matrix : public Object {
+	RefPtr<Token> m_spToken = Token::Get();
 	Gdiplus::Matrix* m_pMatrix;
 public:
 	Matrix() : m_pMatrix(new Gdiplus::Matrix) {}
@@ -53,67 +54,68 @@ public:
 	friend class Graphics;
 };
 
-class gdiplus::Image : public RefCounted<Image> {
-	CComPtr<Token> m_spToken = Token::Get();
+class gdiplus::Image : public ui::Image {
+	RefPtr<Token> m_spToken = Token::Get();
 	Gdiplus::Bitmap* m_pImage;
 public:
 	Image(Gdiplus::Bitmap* pImage);
 	~Image();
 
 	Gdiplus::Bitmap* Bitmap() const { return m_pImage; }
-	float Width() const { return (float)m_pImage->GetWidth(); }
-	float Height() const { return (float)m_pImage->GetHeight(); }
+	float Width() const override { return (float)m_pImage->GetWidth(); }
+	float Height() const override { return (float)m_pImage->GetHeight(); }
 
-	static CComPtr<Image> FromFile(LPCWSTR lpszPath);
-	static CComPtr<Image> FromHICON(HICON hIcon);
-	static CComPtr<Image> Create(int width, int height);
-	static CComPtr<Image> CreateShadow(CComPtr<Image> image, int radius, float opacity);
+	static RefPtr<Image> FromFile(LPCWSTR lpszPath);
+	static RefPtr<Image> FromHICON(HICON hIcon);
+	static RefPtr<Image> Create(int width, int height);
+	static RefPtr<Image> CreateShadow(RefPtr<Image> image, int radius, float opacity);
 
 	friend class Graphics;
 };
 
-class gdiplus::Path : public RefCounted<Path> {
-	CComPtr<Token> m_spToken = Token::Get();
+class gdiplus::Path : public Object {
+	RefPtr<Token> m_spToken = Token::Get();
 	Gdiplus::GraphicsPath* m_pPath;
 public:
 	Path(Gdiplus::GraphicsPath* pPath);
 	~Path();
 };
 
-class gdiplus::Region : public RefCounted<Region> {
-	CComPtr<Token> m_spToken = Token::Get();
+class gdiplus::Region : public Object {
+	RefPtr<Token> m_spToken = Token::Get();
 	Gdiplus::Region* m_pRegion;
 public:
 	Region(Gdiplus::Region* pRegion);
 	~Region();
 
-	static CComPtr<Region> CreateRoundRectRegion(Rect rect, float radius);
+	static RefPtr<Region> CreateRoundRectRegion(Rect rect, float radius);
 
 	friend class Graphics;
 };
 
-class gdiplus::Graphics : public RefCounted<Graphics> {
-	CComPtr<Token> m_spToken = Token::Get();
-	CComPtr<Region> m_spRegion;
+class gdiplus::Graphics : public Object {
+	RefPtr<Token> m_spToken = Token::Get();
+	RefPtr<Region> m_spRegion;
 	Gdiplus::Graphics* m_pGraphics;
 public:
 	Graphics(Gdiplus::Graphics* pGraphics);
 	~Graphics();
 
 	bool DrawImage(Image* pImage, Gdiplus::RectF source, Gdiplus::RectF target, Matrix* transform);
+	bool DrawString(const std::wstring& text, Gdiplus::Font* font, COLORREF color, TextAlignment textAlignment, TextVerticalAlignment textVerticalAlignment, Gdiplus::RectF target, Matrix* transform);
 	bool DrawRect(COLORREF color, Gdiplus::RectF target, Matrix* transform);
 	bool Clear(COLORREF color);
 	void SetClip(Region* region);
 
-	static CComPtr<Graphics> FromImage(Image* image);
-	static CComPtr<Graphics> FromWindow(HWND hWnd);
-	static CComPtr<Graphics> FromHDC(HDC hDC);
+	static RefPtr<Graphics> FromImage(Image* image);
+	static RefPtr<Graphics> FromWindow(HWND hWnd);
+	static RefPtr<Graphics> FromHDC(HDC hDC);
 };
 
-class gdiplus::Framebuffer : public RefCounted<Framebuffer> {
-	CComPtr<Token> m_spToken = Token::Get();
-	CComPtr<Image> m_spImage;
-	CComPtr<Graphics> m_spGraphics;
+class gdiplus::Framebuffer : public Object {
+	RefPtr<Token> m_spToken = Token::Get();
+	RefPtr<Image> m_spImage;
+	RefPtr<Graphics> m_spGraphics;
 	const uint16_t m_nWidth;
 	const uint16_t m_nHeight;
 public:
@@ -122,14 +124,14 @@ public:
 	friend class StaticLayer;
 };
 
-class gdiplus::StaticLayer : public SupportWeak<StaticLayer> {
+class gdiplus::StaticLayer : public Object {
 	WeakPtr<StaticLayer> m_spParentLayer;
-	CComPtr<Image> m_spContent;
-	ATL::CAtlArray<CComPtr<StaticLayer>> m_aSublayers;
+	RefPtr<Image> m_spContent;
+	ATL::CAtlArray<RefPtr<StaticLayer>> m_aSublayers;
 
 	mutable bool m_bNeedsDisplay = false;
-	mutable CComPtr<Framebuffer> m_spFramebuffer;
-	mutable CComPtr<Image> m_spShadowBuffer;
+	mutable RefPtr<Framebuffer> m_spFramebuffer;
+	mutable RefPtr<Image> m_spShadowBuffer;
 
 	COLORREF m_cBackgroundColor = 0;
 	float m_fOffsetX = 0.0f;
@@ -153,7 +155,7 @@ class gdiplus::StaticLayer : public SupportWeak<StaticLayer> {
 	float m_fShadowOffsetY = 0.0f;
 
 public:
-	static CComPtr<StaticLayer> Create(uint16_t nWidth, uint16_t nHeight);
+	static RefPtr<StaticLayer> Create(uint16_t nWidth, uint16_t nHeight);
 
 	COLORREF BackgroundColor() const;
 	void SetBackgroundColor(COLORREF color);
@@ -191,11 +193,15 @@ public:
 	float ShadowRadius() const;
 	void SetShadowRadius(float radius);
 
-	void SetNeedsDisplay();
+	Image* Content() const;
 	void SetContent(Image* pImage);
+
+	void SetNeedsDisplay();
 
 	void AddLayer(StaticLayer* pLayer);
 	void RemoveFromSuperlayer();
+
+	void DrawString(const std::wstring& text, float fontSize, Color color, TextAlignment textAlignment, TextVerticalAlignment textVerticalAlignment, Matrix* pMatrix);
 
 	bool isNeedsOffscreenRender() const { return true; }
 
@@ -205,7 +211,7 @@ public:
 };
 
 class gdiplus::Layer : public ui::Layer {
-	CComPtr<StaticLayer> _layer = new StaticLayer;
+	RefPtr<StaticLayer> _layer = new StaticLayer;
 public:
 	Color backgroundColor() const override;
 	void setBackgroundColor(Color color) override;
@@ -243,11 +249,15 @@ public:
 	float shadowRadius() const override;
 	void setShadowRadius(float radius) override;
 
-	void setNeedsDisplay() override;
+	void* content() const override;
 	void setContent(void* image) override;
+
+	void setNeedsDisplay() override;
 
 	void addLayer(ui::Layer* layer) override;
 	void removeFromSuperlayer() override;
+
+	void drawText(const std::wstring& text, float fontSize, Color color, TextAlignment textAlignment, TextVerticalAlignment textVerticalAlignment) override;
 
 	void paint(HDC hDC);
 	void paint(RefPtr<render::RGBAVideoSource> source) const;

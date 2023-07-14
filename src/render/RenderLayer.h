@@ -8,6 +8,9 @@ OMP_RENDER_NAMESPACE_BEGIN
 
 /// RenderLayer主要负责内容布局，负责将DataSource提供的内容绘制到指定区域。
 struct RenderLayer : public RenderSource {
+    virtual bool enabled() const;
+    virtual void setEnabled(bool enabled);
+
     /// 锚点位置，取值范围0-1，决定旋转的圆心，但不会改变原点的位置。
     virtual vec2 anchorPoint() const;
     virtual void setAnchorPoint(const vec2 &anchorPoint);
@@ -76,6 +79,7 @@ protected:
     float _alpha        = 1;
     bool _maskToBounds  = true;
     bool _visible       = true;
+    bool _enabled       = true;
     RefPtr<DataSource> _source;
     std::vector<RefPtr<RenderLayer>> _sublayers;
 };

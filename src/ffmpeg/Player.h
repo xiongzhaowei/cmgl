@@ -14,6 +14,7 @@ class MoviePlayer : public Object {
     RefPtr<MovieSourceStream> _videoSource;
     RefPtr<AudioRenderer> _audioRenderer;
     RefPtr<VideoRenderer> _videoRenderer;
+    RefPtr<MoviePlayer> _self;
     bool _isPlaying = false;
 public:
     static RefPtr<MoviePlayer> file(const std::string& path, RefPtr<MovieThread> thread = nullptr);

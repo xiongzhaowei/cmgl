@@ -52,6 +52,8 @@ public:
     template <typename S>
     bool operator ==(const WeakPtr<S> &other) const { return value() == other.value(); }
     template <typename S>
+    bool operator !=(S *other) const { return value() != other; }
+    template <typename S>
     bool operator !=(const S *other) const { return value() != other; }
     template <typename S>
     bool operator !=(const RefPtr<S> &other) const { return value() != other.value(); }

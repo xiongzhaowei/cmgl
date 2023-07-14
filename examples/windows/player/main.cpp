@@ -2,6 +2,8 @@
 #include <Windows.h>
 #include "CMGL.h"
 
+using namespace wheel;
+#include "player.h"
 
 const std::wstring mbstowcs(const std::string& str, uint32_t codePage) {
     if (str.empty()) return L"";
@@ -25,47 +27,19 @@ int APIENTRY wWinMain(
     _In_ wchar_t *command_line,
     _In_ int show_command
 ) {
+    SetProcessDPIAware();
+
     std::wstring http = L"http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
     std::wstring url = L"D:\\迅雷下载\\Guardian Of The Galaxy Volume 3 (2023) ENG HDTC 1080p x264 AAC - HushRips.mp4";
-    wheel::RefPtr<wheel::ffmpeg::MoviePlayer> player = wheel::ffmpeg::MoviePlayer::file(wcstombs(url, CP_UTF8));
+    std::wstring dsv = L"C:\\Users\\SHAREit\\Downloads\\(whatsapp)09977c28a0414b9ba61aee2ae05928ce.mp4.dsv";
 
-    wheel::RefPtr<wheel::ui::windows::PlatformWindow> w = new wheel::ui::windows::PlatformWindow(wheel::ui::windows::PlatformWindow::Style::create(TEXT("Player"), TEXT(""), true, true, true, true, false, false));
-    if (w->create(1024, 768, nullptr, true)) {
-        wheel::RefPtr<wheel::render::YUV420PVideoSource> source = new wheel::render::YUV420PVideoSource;
-        wheel::RefPtr<wheel::render::RenderLayer> layer = new wheel::render::RenderLayer;
-        layer->setSource(source);
-        layer->setPosition(glm::vec2(100, 100));
-        layer->setSize(glm::vec2(800, 600));
-        w->render([w, layer](wheel::render::egl::EGLRenderContext* context) {
-            context->addSource(layer);
-        });
-
-        wheel::RefPtr<wheel::ui::windows::NCHitTestView> caption = new wheel::ui::windows::NCHitTestView;
-        caption->setFrame(wheel::ui::Rect(0, 0, 1024, 32));
-        caption->setBackgroundColor(wheel::ui::Color(0xFF00FFFF));
-        caption->setCode(HTCAPTION);
-        w->addSubview(caption);
-        w->showWindow(SW_SHOW);
-
-        player->bind(AV_PIX_FMT_YUV420P, [w, source](wheel::RefPtr<wheel::ffmpeg::Frame> frame) {
-            source->update(frame->frame());
-            PostMessage(w->handle(), WM_USER, 0, 0);
-        });
-        player->play(true);
-        player->seek(100, [player](bool result) {
-            std::string t = std::to_string(double(player->time()) / player->duration());
-        });
-        player->setVolume(2);
-    }
+    RefPtr<PlayerWindowController> playerWindowController = new PlayerWindowController(url);
+    playerWindowController->open(wcstombs(url, CP_UTF8));
 
     MSG msg;
-    while (GetMessage(&msg, NULL, 0, 0)) {
-        if (msg.message == WM_USER) {
-            w->render([](wheel::render::egl::EGLRenderContext* context) {});
-        } else {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
+    while (GetMessage(&msg, NULL, 0, 0) > 0) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
     }
 
     return 0;

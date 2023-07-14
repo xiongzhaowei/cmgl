@@ -14,7 +14,7 @@ static_assert(GDIPVER == 0x0110)
 OMP_UI_WINDOWS_USING_NAMESPACE
 using namespace gdiplus;
 
-windows::WeakPtr<Token> Token::shared;
+WeakPtr<Token> Token::shared;
 
 Token::Token() {
 	::Gdiplus::GdiplusStartup(&m_hToken, &m_input, NULL);
@@ -24,31 +24,31 @@ Token::~Token() {
 	::Gdiplus::GdiplusShutdown(m_hToken);
 }
 
-CComPtr<Token> Token::Get() {
+RefPtr<Token> Token::Get() {
 	if (shared == nullptr) {
 		shared = new Token;
 	}
 	return shared;
 }
 
-Image::Image(Gdiplus::Bitmap* pImage) : m_pImage(pImage) {
+gdiplus::Image::Image(Gdiplus::Bitmap* pImage) : m_pImage(pImage) {
 	assert(pImage != nullptr);
 }
 
-Image::~Image() {
+gdiplus::Image::~Image() {
 	if (m_pImage) {
 		delete m_pImage;
 		m_pImage = nullptr;
 	}
 }
 
-CComPtr<Image> Image::FromFile(LPCWSTR lpszPath) {
-	CComPtr<Token> spToken = Token::Get();
+RefPtr<gdiplus::Image> gdiplus::Image::FromFile(LPCWSTR lpszPath) {
+	RefPtr<Token> spToken = Token::Get();
 	return new Image(Gdiplus::Bitmap::FromFile(lpszPath));
 }
 
-CComPtr<Image> Image::FromHICON(HICON hIcon) {
-	CComPtr<Token> spToken = Token::Get();
+RefPtr<gdiplus::Image> gdiplus::Image::FromHICON(HICON hIcon) {
+	RefPtr<Token> spToken = Token::Get();
 	return new Image(Gdiplus::Bitmap::FromHICON(hIcon));
 }
 
@@ -74,7 +74,7 @@ Region::~Region() {
 	}
 }
 
-CComPtr<Region> Region::CreateRoundRectRegion(Rect rect, float radius) {
+RefPtr<Region> Region::CreateRoundRectRegion(Rect rect, float radius) {
 	return new Region(new Gdiplus::Region(CreateRoundRectRgn(
 		(int)roundf(rect.origin.x),
 		(int)roundf(rect.origin.y),
@@ -96,18 +96,18 @@ Graphics::~Graphics() {
 	}
 }
 
-CComPtr<Graphics> Graphics::FromImage(Image* image) {
-	CComPtr<Token> spToken = Token::Get();
+RefPtr<Graphics> Graphics::FromImage(Image* image) {
+	RefPtr<Token> spToken = Token::Get();
 	return new Graphics(Gdiplus::Graphics::FromImage(image->m_pImage));
 }
 
-CComPtr<Graphics> Graphics::FromWindow(HWND hWnd) {
-	CComPtr<Token> spToken = Token::Get();
+RefPtr<Graphics> Graphics::FromWindow(HWND hWnd) {
+	RefPtr<Token> spToken = Token::Get();
 	return new Graphics(Gdiplus::Graphics::FromHWND(hWnd));
 }
 
-CComPtr<Graphics> Graphics::FromHDC(HDC hDC) {
-	CComPtr<Token> spToken = Token::Get();
+RefPtr<Graphics> Graphics::FromHDC(HDC hDC) {
+	RefPtr<Token> spToken = Token::Get();
 	return new Graphics(Gdiplus::Graphics::FromHDC(hDC));
 }
 
@@ -250,17 +250,23 @@ static Gdiplus::Bitmap* CreateShadow(Gdiplus::Bitmap* bitmap, int radius, float 
 	return shadow;
 }
 
-CComPtr<Image> Image::Create(int width, int height) {
+RefPtr<gdiplus::Image> gdiplus::Image::Create(int width, int height) {
 	return new Image(new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB));
 }
 
-CComPtr<Image> Image::CreateShadow(CComPtr<Image> image, int radius, float opacity) {
+RefPtr<gdiplus::Image> gdiplus::Image::CreateShadow(RefPtr<Image> image, int radius, float opacity) {
 	return new Image(::CreateShadow(image->m_pImage, radius, opacity));
 }
 
 bool Graphics::DrawImage(Image* image, Gdiplus::RectF source, Gdiplus::RectF target, Matrix* transform) {
 	if (nullptr == m_pGraphics) return false;
 	if (image == nullptr) return false;
+
+	// 不知为何，这里需要减1，否则会多绘制1像素的空白区域，当图片拉伸时，会导致很明显的画面问题
+	source.Width -= 1;
+	source.Height -= 1;
+	target.Width -= 1;
+	target.Height -= 1;
 
 	if (transform) {
 		m_pGraphics->SetTransform(transform->m_pMatrix);
@@ -269,6 +275,44 @@ bool Graphics::DrawImage(Image* image, Gdiplus::RectF source, Gdiplus::RectF tar
 		return status == Gdiplus::Status::Ok;
 	} else {
 		return m_pGraphics->DrawImage(image->m_pImage, target, source, Gdiplus::Unit::UnitPixel) == Gdiplus::Status::Ok;
+	}
+}
+
+bool Graphics::DrawString(const std::wstring& text, Gdiplus::Font* font, COLORREF color, TextAlignment textAlignment, TextVerticalAlignment textVerticalAlignment, Gdiplus::RectF target, Matrix* transform) {
+	if (nullptr == m_pGraphics) return false;
+
+	Gdiplus::StringFormat format(Gdiplus::StringFormat::GenericDefault());
+	switch (textAlignment) {
+	case TextAlignment::left:
+		format.SetAlignment(Gdiplus::StringAlignment::StringAlignmentNear);
+		break;
+	case TextAlignment::center:
+		format.SetAlignment(Gdiplus::StringAlignment::StringAlignmentCenter);
+		break;
+	case TextAlignment::right:
+		format.SetAlignment(Gdiplus::StringAlignment::StringAlignmentFar);
+		break;
+	}
+	switch (textVerticalAlignment) {
+	case TextVerticalAlignment::top:
+		format.SetLineAlignment(Gdiplus::StringAlignment::StringAlignmentNear);
+		break;
+	case TextVerticalAlignment::center:
+		format.SetLineAlignment(Gdiplus::StringAlignment::StringAlignmentCenter);
+		break;
+	case TextVerticalAlignment::bottom:
+		format.SetLineAlignment(Gdiplus::StringAlignment::StringAlignmentFar);
+		break;
+	}
+
+	Gdiplus::SolidBrush brush = Gdiplus::SolidBrush(Gdiplus::Color(color));
+	if (transform) {
+		m_pGraphics->SetTransform(transform->m_pMatrix);
+		Gdiplus::Status status = m_pGraphics->DrawString(text.c_str(), (int32_t)text.size(), font, target, &format, &brush);
+		m_pGraphics->ResetTransform();
+		return status == Gdiplus::Status::Ok;
+	} else {
+		return m_pGraphics->DrawString(text.c_str(), (int32_t)text.size(), font, target, &format, &brush) == Gdiplus::Status::Ok;
 	}
 }
 
@@ -299,14 +343,14 @@ void Graphics::SetClip(Region* region) {
 }
 
 Framebuffer::Framebuffer(uint16_t nWidth, uint16_t nHeight) : m_nWidth(nWidth), m_nHeight(nHeight) {
-	CComPtr<Token> spToken = Token::Get();
+	RefPtr<Token> spToken = Token::Get();
 	Gdiplus::Bitmap* pImage = new Gdiplus::Bitmap(nWidth, nHeight, PixelFormat32bppPARGB);
 	m_spImage = new Image(pImage);
 	m_spGraphics = new Graphics(Gdiplus::Graphics::FromImage(pImage));
 }
 
-CComPtr<StaticLayer> StaticLayer::Create(uint16_t nWidth, uint16_t nHeight) {
-	CComPtr<StaticLayer> layer = new StaticLayer;
+RefPtr<StaticLayer> StaticLayer::Create(uint16_t nWidth, uint16_t nHeight) {
+	RefPtr<StaticLayer> layer = new StaticLayer;
 	layer->m_spFramebuffer = new Framebuffer(nWidth, nHeight);
 	layer->m_fWidth = nWidth;
 	layer->m_fHeight = nHeight;
@@ -406,14 +450,15 @@ void StaticLayer::SetShadowRadius(float radius) {
 	m_fShadowRadius = roundf(radius);
 }
 
-void StaticLayer::SetNeedsDisplay() {
-	if (m_spParentLayer) m_spParentLayer->SetNeedsDisplay();
-	m_bNeedsDisplay = true;
-}
-
+gdiplus::Image* StaticLayer::Content() const { return m_spContent; }
 void StaticLayer::SetContent(Image* pImage) {
 	if (m_spParentLayer) m_spParentLayer->SetNeedsDisplay();
 	m_spContent = pImage;
+}
+
+void StaticLayer::SetNeedsDisplay() {
+	m_bNeedsDisplay = true;
+	if (m_spParentLayer) m_spParentLayer->SetNeedsDisplay();
 }
 
 void StaticLayer::AddLayer(StaticLayer* pLayer) {
@@ -436,6 +481,20 @@ void StaticLayer::RemoveFromSuperlayer() {
 	}
 }
 
+void StaticLayer::DrawString(const std::wstring& text, float fontSize, Color color, TextAlignment textAlignment, TextVerticalAlignment textVerticalAlignment, Matrix* pMatrix) {
+	ui::Size size = Bounds().size;
+	if (m_spFramebuffer == nullptr || m_spFramebuffer->m_nWidth < size.width || m_spFramebuffer->m_nHeight < size.height) {
+		m_spFramebuffer = new Framebuffer((uint16_t)size.width, (uint16_t)size.height);
+	}
+
+	NONCLIENTMETRICSW metrics = { sizeof(metrics) };
+	SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, metrics.cbSize, &metrics, 0);
+
+	Gdiplus::Font font = Gdiplus::Font(metrics.lfMessageFont.lfFaceName, fontSize);
+	m_spFramebuffer->m_spGraphics->Clear(BackgroundColor());
+	m_spFramebuffer->m_spGraphics->DrawString(text, &font, color.argb, textAlignment, textVerticalAlignment, Gdiplus::RectF(0, 0, m_fWidth, m_fHeight), pMatrix);
+}
+
 void StaticLayer::Draw(Graphics* pGraphics, Matrix* pMatrix) const {
 	if (m_spContent != nullptr && m_fContentWidth > 0 && m_fContentHeight > 0) {
 		pGraphics->DrawImage(
@@ -448,8 +507,8 @@ void StaticLayer::Draw(Graphics* pGraphics, Matrix* pMatrix) const {
 }
 
 void StaticLayer::Paint(HDC hDC) const {
-	CComPtr<Graphics> pGraphics = Graphics::FromHDC(hDC);
-	CComPtr<Matrix> pMatrix = new Matrix;
+	RefPtr<Graphics> pGraphics = Graphics::FromHDC(hDC);
+	RefPtr<Matrix> pMatrix = new Matrix;
 	Paint(pGraphics, pMatrix);
 }
 
@@ -457,14 +516,14 @@ void StaticLayer::Paint(Graphics* pGraphics, Matrix* pMatrix) const {
 	assert(pGraphics != nullptr);
 	assert(pMatrix != nullptr);
 
-	CComPtr<Matrix> pCurrent = pMatrix->Clone();
+	RefPtr<Matrix> pCurrent = pMatrix->Clone();
 	pCurrent->Translate(m_fPositionX, m_fPositionY);
 	pCurrent->Rotate(m_fRotate);
 	pCurrent->Scale(1.0f / m_fScaleX, 1.0f / m_fScaleY);
 	pCurrent->Translate(-(m_fWidth * m_fAnchorX + m_fOffsetX), -(m_fHeight * m_fAnchorY + m_fOffsetY));
 
 	if (isNeedsOffscreenRender()) {
-		CComPtr<Matrix> pLocal = new Matrix;
+		RefPtr<Matrix> pLocal = new Matrix;
 		pLocal->Translate(-m_fOffsetX, -m_fOffsetY);
 
 		if (m_spFramebuffer == nullptr || m_fWidth > m_spFramebuffer->m_nWidth || m_fHeight > m_spFramebuffer->m_nHeight) {
@@ -478,12 +537,12 @@ void StaticLayer::Paint(Graphics* pGraphics, Matrix* pMatrix) const {
 				m_spFramebuffer->m_spGraphics->SetClip(Region::CreateRoundRectRegion(Rect(0, 0, m_fWidth, m_fHeight), m_fCornerRadius));
 			}
 
-			if (m_cBackgroundColor != 0) m_spFramebuffer->m_spGraphics->Clear(m_cBackgroundColor);
+			m_spFramebuffer->m_spGraphics->Clear(m_cBackgroundColor);
 
 			Draw(m_spFramebuffer->m_spGraphics, pLocal);
 
 			for (size_t i = 0; i < m_aSublayers.GetCount(); i++) {
-				CComPtr<StaticLayer> layer = m_aSublayers[i];
+				RefPtr<StaticLayer> layer = m_aSublayers[i];
 				layer->Paint(m_spFramebuffer->m_spGraphics, pLocal);
 			}
 
@@ -527,7 +586,7 @@ void StaticLayer::Paint(Graphics* pGraphics, Matrix* pMatrix) const {
 		Draw(pGraphics, pCurrent);
 
 		for (size_t i = 0; i < m_aSublayers.GetCount(); i++) {
-			CComPtr<StaticLayer> layer = m_aSublayers[i];
+			RefPtr<StaticLayer> layer = m_aSublayers[i];
 			layer->Paint(pGraphics, pCurrent);
 		}
 	}
@@ -633,6 +692,10 @@ void gdiplus::Layer::setNeedsDisplay() {
 	_layer->SetNeedsDisplay();
 }
 
+void* gdiplus::Layer::content() const {
+	return _layer->Content();
+}
+
 void gdiplus::Layer::setContent(void* image) {
 	_layer->SetContent((gdiplus::Image*)image);
 }
@@ -645,19 +708,50 @@ void gdiplus::Layer::removeFromSuperlayer() {
 	_layer->RemoveFromSuperlayer();
 }
 
+void gdiplus::Layer::drawText(const std::wstring& text, float fontSize, Color color, TextAlignment textAlignment, TextVerticalAlignment textVerticalAlignment) {
+	RefPtr<Token> spToken = Token::Get();
+
+	RefPtr<Matrix> matrix = new Matrix;
+
+	_layer->DrawString(text, fontSize, color, textAlignment, textVerticalAlignment, matrix);
+}
+
 void gdiplus::Layer::paint(HDC hDC) {
 	_layer->Paint(hDC);
 }
 
 void gdiplus::Layer::paint(RefPtr<render::RGBAVideoSource> source) const {
-	CComPtr<Token> spToken = Token::Get();
+	RefPtr<Token> spToken = Token::Get();
 
 	ui::Size size = bounds().size;
 	if (size.width * size.height < 1) return;
 
-	CComPtr<Matrix> matrix = new Matrix;
+	RefPtr<Matrix> matrix = new Matrix;
 
-	CComPtr<Image> image = Image::Create((int32_t)size.width, (int32_t)size.height);
+	RefPtr<Image> image = Image::Create((int32_t)size.width, (int32_t)size.height);
 	_layer->Paint(Graphics::FromImage(image), matrix);
 	source->update(image->Bitmap());
+}
+
+RefPtr<ui::Image> ui::Image::file(const std::wstring& path) {
+	RefPtr<Token> spToken = Token::Get();
+	return new gdiplus::Image(Gdiplus::Bitmap::FromFile(path.c_str()));
+}
+
+RefPtr<ui::Image> ui::Image::argb(uint32_t width, uint32_t height, const std::function<COLORREF(uint32_t x, uint32_t y)>& colors) {
+	RefPtr<Token> spToken = Token::Get();
+	Gdiplus::Bitmap* bitmap = new Gdiplus::Bitmap(width, height, PixelFormat32bppARGB);
+	if (bitmap) {
+		Gdiplus::Rect rect(0, 0, width, height);
+		Gdiplus::BitmapData bitmapData = { 0 };
+		bitmap->LockBits(&rect, Gdiplus::ImageLockModeWrite, PixelFormat32bppARGB, &bitmapData);
+		uint8_t* data = (uint8_t*)bitmapData.Scan0;
+		for (uint32_t y = 0; y < bitmapData.Height; y++) {
+			for (uint32_t x = 0; x < bitmapData.Width; x++) {
+				(COLORREF&)data[y * bitmapData.Stride + x * 4] = colors(x, y);
+			}
+		}
+		bitmap->UnlockBits(&bitmapData);
+	}
+	return new gdiplus::Image(bitmap);
 }

@@ -43,7 +43,6 @@ public:
         int32_t frame_size
     );
     AudioRenderer(RefPtr<Thread> thread, RefPtr<MovieBufferedConsumer> buffer, RefPtr<AudioConverter> converter, double time_base);
-    ~AudioRenderer();
 
     double volume() const;
     void setVolume(double volume);
@@ -53,6 +52,7 @@ public:
     void attach(VideoRenderer* renderer);
     void play(bool state);
     void clear();
+    void close();
     int64_t timestamp() const;
 private:
     double _time_base;

@@ -45,6 +45,7 @@ RefPtr<AudioRenderer> AudioRenderer::from(RefPtr<MovieBufferedConsumer> buffer, 
     }
     RefPtr<AudioRenderer> renderer = new AudioRenderer(thread, buffer, converter, av_q2d(time_base));
     spec.userdata = renderer.value();
+    renderer->retain();
     renderer->_device = SDL_OpenAudioDevice(nullptr, 0, &spec, nullptr, 0);
     return (renderer->_device != 0) ? renderer : nullptr;
 }
@@ -56,13 +57,6 @@ AudioRenderer::AudioRenderer(
     double time_base
 ) : _thread(thread), _buffer(buffer), _converter(converter), _time_base(time_base), _device(0), _volume(1) {
 
-}
-
-AudioRenderer::~AudioRenderer() {
-    if (_device != 0) {
-        SDL_CloseAudioDevice(_device);
-        _device = 0;
-    }
 }
 
 double AudioRenderer::volume() const {
@@ -112,6 +106,7 @@ void AudioRenderer::fill(AVSampleFormat format, uint8_t* dst, uint8_t* src, size
 }
 
 void AudioRenderer::fill(uint8_t* stream, int len) {
+    RefPtr<AudioRenderer> self = this;
     RefPtr<Frame> frame = _buffer->pop();
     if (frame != nullptr && _converter != nullptr) {
         frame = _converter->convert(frame);
@@ -139,8 +134,8 @@ void AudioRenderer::fill(uint8_t* stream, int len) {
         } else {
             fill(format, stream, frame->frame()->extended_data[0], count / bytesPerSample, _volume);
         }
-        _thread->runOnThread([=]() {
-            if (_attached) _attached->sync(pts);
+        _thread->runOnThread([self, pts]() {
+            if (self->_attached) self->_attached->sync(pts);
         });
         frame = nullptr;
     }
@@ -156,6 +151,14 @@ void AudioRenderer::play(bool state) {
 
 void AudioRenderer::clear() {
     if (_buffer) _buffer->clear();
+}
+
+void AudioRenderer::close() {
+    if (_device != 0) {
+        SDL_CloseAudioDevice(_device);
+        _device = 0;
+        release();
+    }
 }
 
 int64_t AudioRenderer::timestamp() const {

@@ -6,4 +6,6 @@ target_sources(${PROJECT_NAME} PRIVATE
     Type.h
     View.cpp
     View.h
+    LayoutConstraint.cpp
+    LayoutConstraint.h
 )

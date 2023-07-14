@@ -6,6 +6,14 @@
 
 OMP_RENDER_USING_NAMESPACE
 
+bool RenderLayer::enabled() const {
+    return _enabled;
+}
+
+void RenderLayer::setEnabled(bool enabled) {
+    _enabled = enabled;
+}
+
 vec2 RenderLayer::anchorPoint() const {
     return _anchorPoint;
 }
@@ -121,6 +129,7 @@ void RenderLayer::unload(RefPtr<RenderContext> context) {
 void RenderLayer::render(RefPtr<RenderContext> context, RefPtr<Framebuffer> framebuffer, const mat4 &globalMatrix) {
     if (!_source) return;
     if (!_visible) return;
+    if (!_enabled) return;
     if (_alpha < 0.0000001) return; // 内容过于接近全透明，直接忽略
     
     _source->draw(context, framebuffer, globalMatrix, localMatrix(this), clipMatrix(this), size(), alpha());

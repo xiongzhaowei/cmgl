@@ -1,18 +1,6 @@
 
 OMP_UI_WINDOWS_NAMESPACE_BEGIN
 
-class WindowController : Object {
-	WeakPtr<Window> _window;
-public:
-	Window* window();
-
-	virtual void load();
-	virtual void unload();
-
-	virtual void initWindow();
-	virtual void destroyWindow();
-};
-
 class NCHitTestView : public View {
 	LRESULT _code = HTCLIENT;
 public:
@@ -23,30 +11,41 @@ public:
 class PlatformWindow : public Window {
 	uint32_t _borderSize = 0;
 	ui::Size _minTrackSize = { 0, 0 };
-	RefPtr<render::RGBAVideoSource> _windowLayer;
+	bool _isMouseTracking = false;
+	RefPtr<render::RGBAVideoSource> _renderLayer;
 	RefPtr<render::egl::EGLRenderContext> _eglContext;
 	RefPtr<render::egl::EGLWindow> _eglWindow;
+	RefPtr<View> _enteredView;
 public:
 	class EGLRenderContextImpl;
 	class EGLWindowImpl;
 	class Style;
 
-	PlatformWindow(Style* config);
+	PlatformWindow(RefPtr<Style> style, WindowController* windowController);
 
-	HWND handle() const { return _hWnd; }
+	void* handle() const override { return _hWnd; }
 
-	bool render(std::function<void(render::egl::EGLRenderContext*)> callback) {
+	bool render(std::function<void(render::egl::EGLRenderContext*)> callback) override {
 		if (!_eglContext) return false;
 		if (!_eglWindow) return false;
 
 		callback(_eglContext);
+		layoutIfNeeded();
+		if (_layer && _renderLayer) _layer.cast<gdiplus::Layer>()->paint(_renderLayer);
 		_eglContext->render();
 		return true;
 	}
 
-	bool create(int32_t width, int32_t height, PlatformWindow* parent = nullptr, bool isGLESEnabled = false);
+	bool create(int32_t width, int32_t height, Window* parent = nullptr, bool isGLESEnabled = false) override;
 	void destroy();
+	void show() override;
+	void hide() override;
+	void close() override;
+	void setCaptureView(RefPtr<View> view) override;
 	bool showWindow(int nCmdShow);
+	RefPtr<render::RenderSource> renderLayer() override;
+	void setNeedsDisplay() override;
+	void layoutSubviews() override;
 
 	std::optional<LRESULT> onCreate(const MSG& event);
 	std::optional<LRESULT> onDestroy(const MSG& event);
@@ -68,6 +67,8 @@ public:
 	std::optional<LRESULT> onMouseUp(const MSG& event);
 	std::optional<LRESULT> onDoubleClick(const MSG& event);
 
+	std::optional<LRESULT> handleMouseEvent(const MouseEvent& event) override;
+	std::optional<LRESULT> handleKeyboardEvent(const KeyboardEvent& event) override;
 	std::optional<LRESULT> handleNativeEvent(const MSG& event) override;
 
 	static LRESULT WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -84,8 +85,10 @@ class PlatformWindow::Style : public Object {
 	uint32_t _style;
 	uint32_t _exStyle;
 	uint32_t _classStyle;
+	bool _fullscreen;
+	bool _dwmShadow;
 public:
-	static Style* create(
+	static RefPtr<Style> create(
 		std::basic_string<TCHAR> className,
 		std::basic_string<TCHAR> title,
 		bool doubleClick,
@@ -93,10 +96,12 @@ public:
 		bool maximize,
 		bool close,
 		bool fixedSize,
-		bool layeredWindow
+		bool layeredWindow,
+		bool fullscreen,
+		bool dwmShadow
 	);
 
-	Style(HINSTANCE hInstance, std::basic_string<TCHAR> className, std::basic_string<TCHAR> title, uint32_t style, uint32_t exStyle, uint32_t classStyle);
+	Style(HINSTANCE hInstance, std::basic_string<TCHAR> className, std::basic_string<TCHAR> title, uint32_t style, uint32_t exStyle, uint32_t classStyle, bool fullscreen, bool dwmShadow);
 	~Style();
 
 	HINSTANCE instance() const { return _instance; }
@@ -105,6 +110,8 @@ public:
 	uint32_t style() const { return _style; }
 	uint32_t exStyle() const { return _exStyle; }
 	uint32_t classStyle() const { return _classStyle; }
+	bool fullscreen() const { return _fullscreen; }
+	bool dwmShadow() const { return _dwmShadow; }
 };
 
 class PlatformWindow::EGLWindowImpl : public render::egl::EGLWindow {

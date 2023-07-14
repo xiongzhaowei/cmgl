@@ -7,7 +7,7 @@ extern "C" IMAGE_DOS_HEADER __ImageBase;
 
 OMP_UI_WINDOWS_USING_NAMESPACE
 
-PlatformWindow::Style::Style(HINSTANCE hInstance, std::basic_string<TCHAR> className, std::basic_string<TCHAR> title, uint32_t style, uint32_t exStyle, uint32_t classStyle) : _instance(hInstance), _className(className), _title(title), _style(style), _exStyle(exStyle), _classStyle(classStyle) {
+PlatformWindow::Style::Style(HINSTANCE hInstance, std::basic_string<TCHAR> className, std::basic_string<TCHAR> title, uint32_t style, uint32_t exStyle, uint32_t classStyle, bool fullscreen, bool dwmShadow) : _instance(hInstance), _className(className), _title(title), _style(style), _exStyle(exStyle), _classStyle(classStyle), _fullscreen(fullscreen), _dwmShadow(dwmShadow) {
 	WNDCLASSEX wcex = { sizeof(WNDCLASSEX) };
 
 	wcex.style = _classStyle;
@@ -27,7 +27,7 @@ PlatformWindow::Style::~Style() {
 	UnregisterClass(_className.c_str(), _instance);
 }
 
-PlatformWindow::Style* PlatformWindow::Style::create(
+RefPtr<PlatformWindow::Style> PlatformWindow::Style::create(
 	std::basic_string<TCHAR> className,
 	std::basic_string<TCHAR> title,
 	bool doubleClick,
@@ -35,7 +35,9 @@ PlatformWindow::Style* PlatformWindow::Style::create(
 	bool maximize,
 	bool close,
 	bool fixedSize,
-	bool layeredWindow
+	bool layeredWindow,
+	bool fullscreen,
+	bool dwmShadow
 ) {
 	DWORD dwStyle = WS_OVERLAPPED | WS_SYSMENU | WS_CLIPCHILDREN;
 	DWORD dwExStyle = 0;
@@ -48,7 +50,7 @@ PlatformWindow::Style* PlatformWindow::Style::create(
 	if (!fixedSize) dwStyle |= WS_THICKFRAME;
 	if (layeredWindow) dwExStyle |= WS_EX_LAYERED;
 
-	return new Style((HINSTANCE)&__ImageBase, className, title, dwStyle, dwExStyle, dwClassStyle);
+	return new Style((HINSTANCE)&__ImageBase, className, title, dwStyle, dwExStyle, dwClassStyle, fullscreen, dwmShadow);
 }
 
 LRESULT PlatformWindow::WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -81,13 +83,14 @@ LRESULT PlatformWindow::WindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 	return result.has_value() ? result.value() : DefWindowProc(hWnd, uMsg, wParam, lParam);
 }
 
-PlatformWindow::PlatformWindow(Style* style) : _style(style) {
+PlatformWindow::PlatformWindow(RefPtr<Style> style, WindowController* windowController) : _style(style), _windowController(windowController) {
 
 }
 
-bool PlatformWindow::create(int32_t width, int32_t height, PlatformWindow* parent, bool isGLESEnabled) {
+bool PlatformWindow::create(int32_t width, int32_t height, Window* parent, bool isGLESEnabled) {
 	_layer->setAnchorPoint(Point{ 0, 0 });
 	_layer->setBackgroundColor(Color(0xFFFFFFFF));
+	if (isGLESEnabled) _eglWindow = new EGLWindowImpl(this);
 	HWND hWnd = CreateWindowEx(
 		_style->exStyle(),
 		_style->className().c_str(),
@@ -97,7 +100,7 @@ bool PlatformWindow::create(int32_t width, int32_t height, PlatformWindow* paren
 		CW_USEDEFAULT,
 		width,
 		height,
-		parent ? parent->_hWnd : NULL,
+		parent ? (HWND)parent->handle() : NULL,
 		NULL,
 		_style->instance(),
 		this
@@ -107,16 +110,6 @@ bool PlatformWindow::create(int32_t width, int32_t height, PlatformWindow* paren
 		SetWindowLong(hWnd, GWL_STYLE, nWindowLong & ~WS_CAPTION);
 	}
 	if (hWnd == INVALID_HANDLE_VALUE || hWnd == NULL) return false;
-
-	if (isGLESEnabled) {
-		_eglContext = new EGLRenderContextImpl(hWnd);
-		_eglWindow = new EGLWindowImpl(this);
-
-		_eglContext->load();
-		_eglContext->setTarget(_eglWindow);
-		_windowLayer = new render::RGBAVideoSource;
-		_eglContext->addSource(_windowLayer);
-	}
 	return true;
 }
 
@@ -128,29 +121,74 @@ bool PlatformWindow::showWindow(int nCmdShow) {
 	return ::ShowWindow(_hWnd, nCmdShow);
 }
 
-std::optional<LRESULT> PlatformWindow::handleNativeEvent(const MSG& event) {
-	
-	switch (event.message) {
-	case WM_CREATE: return onCreate(event);
-	case WM_DESTROY: return onDestroy(event);
-	case WM_NCACTIVATE: return onNcActivate(event);
-	case WM_NCCALCSIZE: return onNcCalcSize(event);
-	case WM_NCHITTEST: return onNcHitTest(event);
-	case WM_GETMINMAXINFO: return onGetMinMaxInfo(event);
-	case WM_SYSCOMMAND: return onSysCommand(event);
-	case WM_SIZE: return onSize(event);
-	case WM_DPICHANGED: return onDpiChanged(event);
-	case WM_NCMOUSEMOVE:
+void PlatformWindow::show() {
+	showWindow(SW_SHOW);
+}
+
+void PlatformWindow::hide() {
+	showWindow(SW_HIDE);
+}
+
+void PlatformWindow::close() {
+	CloseWindow(_hWnd);
+}
+
+void PlatformWindow::setCaptureView(RefPtr<View> view) {
+	if (_captureView == nullptr && view != nullptr) {
+		SetCapture(_hWnd);
+	} else if (_captureView != nullptr && view == nullptr) {
+		ReleaseCapture();
+	}
+	Window::setCaptureView(view);
+}
+
+RefPtr<render::RenderSource> PlatformWindow::renderLayer() {
+	if (_renderLayer == nullptr) _renderLayer = new render::RGBAVideoSource;
+	return _renderLayer;
+}
+
+void PlatformWindow::setNeedsDisplay() {
+	::InvalidateRect((HWND)handle(), nullptr, true);
+}
+
+void PlatformWindow::layoutSubviews() {
+	if (_windowController) _windowController->layoutWindow();
+}
+
+std::optional<LRESULT> PlatformWindow::handleMouseEvent(const MouseEvent& event) {
+	if (event.native.message == WM_MOUSEMOVE && !_isMouseTracking) {
+		TRACKMOUSEEVENT tme = { 0 };
+		tme.cbSize = sizeof(TRACKMOUSEEVENT);
+		tme.dwFlags = TME_HOVER | TME_LEAVE;
+		tme.hwndTrack = (HWND)handle();
+		tme.dwHoverTime = HOVER_DEFAULT;
+		_isMouseTracking = _TrackMouseEvent(&tme);
+	} else if (event.native.message == WM_MOUSEHOVER || event.native.message == WM_MOUSELEAVE) {
+		_isMouseTracking = false;
+	}
+	View* view = hitTest(event.pt.x, event.pt.y);
+	if (view == nullptr) view = this;
+	switch (event.native.message) {
 	case WM_MOUSEMOVE:
-		return onMouseMove(event);
-	case WM_NCMOUSEHOVER:
-	case WM_MOUSEHOVER:
-		return onMouseHover(event);
-	case WM_NCMOUSELEAVE:
+		if (view != _enteredView) {
+			if (_enteredView) _enteredView->onMouseLeave(event);
+			_enteredView = view;
+			if (_enteredView) _enteredView->onMouseEnter(event);
+		}
+		view->onMouseMove(event);
+		break;
 	case WM_MOUSELEAVE:
-		return onMouseLeave(event);
+		if (_enteredView) {
+			_enteredView->onMouseLeave(event);
+			_enteredView = nullptr;
+		}
+		break;
+	case WM_MOUSEHOVER:
+		view->onMouseHover(event);
+		break;
 	case WM_MOUSEWHEEL:
-		return onMouseWheel(event);
+		view->onMouseWheel(event);
+		break;
 	case WM_NCLBUTTONDOWN:
 	case WM_LBUTTONDOWN:
 	case WM_NCRBUTTONDOWN:
@@ -159,7 +197,8 @@ std::optional<LRESULT> PlatformWindow::handleNativeEvent(const MSG& event) {
 	case WM_MBUTTONDOWN:
 	case WM_NCXBUTTONDOWN:
 	case WM_XBUTTONDOWN:
-		return onMouseDown(event);
+		view->onMouseDown(event);
+		break;
 	case WM_NCLBUTTONUP:
 	case WM_LBUTTONUP:
 	case WM_NCRBUTTONUP:
@@ -168,7 +207,8 @@ std::optional<LRESULT> PlatformWindow::handleNativeEvent(const MSG& event) {
 	case WM_MBUTTONUP:
 	case WM_NCXBUTTONUP:
 	case WM_XBUTTONUP:
-		return onMouseUp(event);
+		view->onMouseUp(event);
+		break;
 	case WM_NCLBUTTONDBLCLK:
 	case WM_LBUTTONDBLCLK:
 	case WM_NCRBUTTONDBLCLK:
@@ -177,22 +217,87 @@ std::optional<LRESULT> PlatformWindow::handleNativeEvent(const MSG& event) {
 	case WM_MBUTTONDBLCLK:
 	case WM_NCXBUTTONDBLCLK:
 	case WM_XBUTTONDBLCLK:
-		return onDoubleClick(event);
-	case WM_PAINT:
-		return onPaint(event);
+		view->onDoubleClick(event);
+		break;
 	default:
 		break;
 	}
 	return std::nullopt;
 }
 
-std::optional<LRESULT> PlatformWindow::onCreate(const MSG& event) {
-	::SetWindowLong(handle(), GWL_STYLE, _style->style());
+std::optional<LRESULT> PlatformWindow::handleKeyboardEvent(const KeyboardEvent& event) {
+	return std::nullopt;
+}
 
+std::optional<LRESULT> PlatformWindow::handleNativeEvent(const MSG& event) {
+	bool isMouseEvent = event.message >= WM_MOUSEFIRST && event.message <= WM_MOUSELAST || event.message == WM_MOUSEHOVER || event.message == WM_MOUSELEAVE;
+	bool isNonClientMouseEvent = false;
+	switch (event.message) {
+	case WM_NCMOUSEMOVE:
+	case WM_NCLBUTTONDOWN:
+	case WM_NCLBUTTONUP:
+	case WM_NCLBUTTONDBLCLK:
+	case WM_NCRBUTTONDOWN:
+	case WM_NCRBUTTONUP:
+	case WM_NCRBUTTONDBLCLK:
+	case WM_NCMBUTTONDOWN:
+	case WM_NCMBUTTONUP:
+	case WM_NCMBUTTONDBLCLK:
+	case WM_NCMOUSEHOVER:
+	case WM_NCMOUSELEAVE:
+		isNonClientMouseEvent = true;
+		break;
+	}
+	if (isMouseEvent || isNonClientMouseEvent) {
+		POINT pt = { GET_X_LPARAM(event.lParam), GET_Y_LPARAM(event.lParam) };
+		if (isNonClientMouseEvent) {
+			// 非客户区的坐标是屏幕坐标
+			ScreenToClient(_hWnd, &pt);
+		}
+		MouseEvent mouse(event, pt.x, pt.y);
+		return handleMouseEvent(mouse);
+	} else if (event.message >= WM_KEYFIRST && event.message <= WM_KEYLAST) {
+		KeyboardEvent keyboard(event);
+		return handleKeyboardEvent(keyboard);
+	} else {
+		switch (event.message) {
+		case WM_CREATE: return onCreate(event);
+		case WM_DESTROY: return onDestroy(event);
+		case WM_NCACTIVATE: return onNcActivate(event);
+		case WM_NCCALCSIZE: return onNcCalcSize(event);
+		case WM_NCHITTEST: return onNcHitTest(event);
+		case WM_GETMINMAXINFO: return onGetMinMaxInfo(event);
+		case WM_SYSCOMMAND: return onSysCommand(event);
+		case WM_SIZE: return onSize(event);
+		case WM_DPICHANGED: return onDpiChanged(event);
+		case WM_PAINT: return onPaint(event);
+		default: break;
+		}
+	}
+	return std::nullopt;
+}
+
+std::optional<LRESULT> PlatformWindow::onCreate(const MSG& event) {
+	HWND hWnd = (HWND)handle();
+	::SetWindowLong(hWnd, GWL_STYLE, _style->style());
+	if (_style->dwmShadow()) {
+		DWORD dwValue = 2;
+		DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &dwValue, sizeof(dwValue));
+		MARGINS margins = { 1, 1, 1, 1 };
+		DwmExtendFrameIntoClientArea(hWnd, &margins);
+	}
+	if (_eglWindow) {
+		_eglContext = new EGLRenderContextImpl(hWnd);
+		_eglContext->load();
+		_eglContext->setTarget(_eglWindow);
+	}
+	if (_windowController) _windowController->onInitWindow();
+	setNeedsLayout();
 	return 0;
 }
 
 std::optional<LRESULT> PlatformWindow::onDestroy(const MSG& event) {
+	if (_windowController) _windowController->onDestroyWindow();
 	if (_eglContext) {
 		_eglContext->setTarget(nullptr);
 		_eglContext->unload();
@@ -211,7 +316,7 @@ std::optional<LRESULT> PlatformWindow::onNcCalcSize(const MSG& event) {
 
 std::optional<LRESULT> PlatformWindow::onNcHitTest(const MSG& event) {
 	POINT pt = { GET_X_LPARAM(event.lParam), GET_Y_LPARAM(event.lParam) };
-	ScreenToClient(handle(), &pt);
+	ScreenToClient((HWND)handle(), &pt);
 
 	Size scale = this->scale();
 	NCHitTestView* view = dynamic_cast<NCHitTestView*>(hitTest(pt.x / scale.width, pt.y / scale.height));
@@ -227,7 +332,7 @@ std::optional<LRESULT> PlatformWindow::onNcHitTest(const MSG& event) {
 	case HTBOTTOM:
 	case HTBOTTOMLEFT:
 	case HTBOTTOMRIGHT:
-		return IsZoomed(handle()) ? HTCLIENT : code;
+		return IsZoomed((HWND)handle()) ? HTCLIENT : code;
 	default:
 		return code;
 	}
@@ -239,10 +344,14 @@ std::optional<LRESULT> PlatformWindow::onGetMinMaxInfo(const MSG& event) {
 
 	RECT rcWork = oMonitor.rcWork;
 	RECT rcMonitor = oMonitor.rcMonitor;
-	rcWork.left -= oMonitor.rcMonitor.left;
-	rcWork.right -= oMonitor.rcMonitor.left;
-	rcWork.top -= oMonitor.rcMonitor.top;
-	rcWork.bottom -= oMonitor.rcMonitor.top;
+	if (!_style->fullscreen()) {
+		rcWork.left -= rcMonitor.left;
+		rcWork.right -= rcMonitor.left;
+		rcWork.top -= rcMonitor.top;
+		rcWork.bottom -= rcMonitor.top;
+	} else {
+		rcWork = rcMonitor;
+	}
 
 	LPMINMAXINFO lpMMI = (LPMINMAXINFO)event.lParam;
 
@@ -269,17 +378,19 @@ std::optional<LRESULT> PlatformWindow::onDpiChanged(const MSG& event) {
 
 std::optional<LRESULT> PlatformWindow::onSize(const MSG& event) {
 	_layer->setBounds(Rect(0, 0, LOWORD(event.lParam), HIWORD(event.lParam)));
-	::InvalidateRect(_hWnd, NULL, TRUE);
-	//::UpdateWindow(_hWnd);
+	setNeedsLayout();
+	render([](auto) {});
 	return std::nullopt;
 }
 
 std::optional<LRESULT> PlatformWindow::onPaint(const MSG& event) {
+	layoutIfNeeded();
+
 	PAINTSTRUCT ps;
 	if (_eglContext) {
 		BeginPaint(_hWnd, &ps);
 		EndPaint(_hWnd, &ps);
-		if (_layer) _layer.cast<gdiplus::Layer>()->paint(_windowLayer);
+		if (_layer && _renderLayer) _layer.cast<gdiplus::Layer>()->paint(_renderLayer);
 
 		_eglContext->render();
 	} else {
@@ -322,7 +433,7 @@ PlatformWindow::EGLWindowImpl::EGLWindowImpl(PlatformWindow* window) : _window(w
 }
 
 HWND PlatformWindow::EGLWindowImpl::handle() const {
-	return _window->handle();
+	return (HWND)_window->handle();
 }
 
 render::vec2 PlatformWindow::EGLWindowImpl::size() const {

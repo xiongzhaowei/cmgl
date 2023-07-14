@@ -36,15 +36,41 @@ union Color {
     };
     uint32_t argb;
 
-    Color(uint32_t color) : argb(color) {}
+    Color(uint32_t color);
+};
+
+enum class TextAlignment {
+    none,
+    left,
+    center,
+    right,
+};
+
+enum class TextVerticalAlignment {
+    none,
+    top,
+    center,
+    bottom,
+};
+
+class Image : public Object {
+public:
+	virtual float Width() const = 0;
+	virtual float Height() const = 0;
+
+	static RefPtr<Image> file(const std::wstring& path);
+	static RefPtr<ui::Image> argb(uint32_t width, uint32_t height, const std::function<COLORREF(uint32_t x, uint32_t y)>& colors);
 };
 
 typedef struct tagMSG NativeEvent;
+class View;
 
 struct MouseEvent {
     const NativeEvent& native;
+    Point pt;
 
-    MouseEvent(const NativeEvent& native);
+    MouseEvent(const NativeEvent& native, float x, float y);
+    Point localPoint(RefPtr<View> view) const;
 };
 
 struct KeyboardEvent {

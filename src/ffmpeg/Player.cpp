@@ -24,6 +24,7 @@ bool MoviePlayer::open(RefPtr<MovieFile> file, RefPtr<MovieThread> thread) {
     _videoSource = videoSource;
     _thread = thread != nullptr ? thread : new MovieThread;
     _thread->add(_source);
+    _self = this;
 
     return true;
 }
@@ -41,6 +42,7 @@ bool MoviePlayer::open(const std::string& path, RefPtr<MovieThread> thread) {
     _videoSource = videoSource;
     _thread = thread != nullptr ? thread : new MovieThread;
     _thread->add(_source);
+    _self = this;
 
     return true;
 }
@@ -49,6 +51,7 @@ void MoviePlayer::close() {
     _thread->runOnThread([this]() {
         _audioRenderer->play(false);
         _audioRenderer->attach(nullptr);
+        _audioRenderer->close();
         _thread->remove(_source);
         _thread = nullptr;
         _source->close();
@@ -57,6 +60,7 @@ void MoviePlayer::close() {
         _videoRenderer = nullptr;
         _audioSource = nullptr;
         _videoSource = nullptr;
+        _self = nullptr;
     });
 }
 
