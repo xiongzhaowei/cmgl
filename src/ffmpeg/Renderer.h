@@ -11,11 +11,14 @@ public:
     static RefPtr<VideoRenderer> from(
         RefPtr<MovieBufferedConsumer> buffer,
         AVRational time_base,
+        RefPtr<MovieThread> thread,
+        AVRational frame_rate,
         std::function<void(RefPtr<Frame>)> callback
     );
-    VideoRenderer(RefPtr<MovieBufferedConsumer> buffer, double time_base, std::function<void(RefPtr<Frame>)> callback);
+    VideoRenderer(RefPtr<MovieBufferedConsumer> buffer, double time_base, RefPtr<MovieThread> thread, AVRational frame_rate, std::function<void(RefPtr<Frame>)> callback);
     ~VideoRenderer();
 
+    void play(bool state);
     void sync(double pts);
     void clear();
     int64_t timestamp() const;
@@ -23,6 +26,9 @@ private:
     double _time_base;
     RefPtr<MovieBufferedConsumer> _buffer;
     std::function<void(RefPtr<Frame>)> _callback;
+    AVRational _frame_rate;
+    RefPtr<MovieThread> _thread;
+    RefPtr<MovieThread::ScheduledTask> _schedule;
 };
 
 class AudioRenderer : public Object {

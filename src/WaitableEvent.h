@@ -12,6 +12,8 @@ class WaitableEvent : public Object {
 public:
     void signal();
     void wait(const std::function<bool()>& pred);
+    bool wait(const std::function<bool()>& pred, double timeout);
+    bool wait(const std::function<bool()>& pred, std::chrono::steady_clock::time_point timeout);
 };
 
 OMP_NAMESPACE_END

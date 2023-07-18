@@ -28,6 +28,6 @@ extern "C" {
 #include "AudioSplitter.h"
 #include "Converter.h"
 #include "Source.h"
-#include "Renderer.h"
 #include "Thread.h"
+#include "Renderer.h"
 #include "Player.h"

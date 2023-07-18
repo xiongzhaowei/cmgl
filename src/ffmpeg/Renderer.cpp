@@ -169,17 +169,36 @@ int64_t AudioRenderer::timestamp() const {
 RefPtr<VideoRenderer> VideoRenderer::from(
     RefPtr<MovieBufferedConsumer> buffer,
     AVRational time_base,
+    RefPtr<MovieThread> thread,
+    AVRational frame_rate,
     std::function<void(RefPtr<Frame>)> callback
 ) {
-    return new VideoRenderer(buffer, av_q2d(time_base), callback);
+    return new VideoRenderer(buffer, av_q2d(time_base), thread, frame_rate, callback);
 }
 
-VideoRenderer::VideoRenderer(RefPtr<MovieBufferedConsumer> buffer, double time_base, std::function<void(RefPtr<Frame>)> callback) : _buffer(buffer), _time_base(time_base), _callback(callback) {
+VideoRenderer::VideoRenderer(RefPtr<MovieBufferedConsumer> buffer, double time_base, RefPtr<MovieThread> thread, AVRational frame_rate, std::function<void(RefPtr<Frame>)> callback) : _buffer(buffer), _time_base(time_base), _thread(thread), _frame_rate(frame_rate), _callback(callback) {
 
 }
 
 VideoRenderer::~VideoRenderer() {
 
+}
+
+void VideoRenderer::play(bool state) {
+    if (state) {
+        if (_schedule == nullptr) {
+            _schedule = _thread->schedule(1.0 / av_q2d(_frame_rate), [this]() {
+                RefPtr<Frame> frame = _buffer->pop();
+                if (frame != nullptr) _callback(frame);
+                return true;
+            });
+        }
+    } else {
+        if (_schedule) {
+            _thread->cancel(_schedule);
+            _schedule = nullptr;
+        }
+    }
 }
 
 void VideoRenderer::sync(double pts) {

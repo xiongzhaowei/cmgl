@@ -77,13 +77,16 @@ int32_t MoviePlayer::height() const {
 }
 
 void MoviePlayer::bind(AVPixelFormat format, std::function<void(RefPtr<Frame>)> render) {
-    if (AVStream* audioStream = _source->stream(AVMEDIA_TYPE_AUDIO)) {
+    if (_audioSource) {
+        AVStream* stream = _audioSource->stream();
+        AVCodecParameters* codecpar = stream->codecpar;
         RefPtr<MovieBufferedConsumer> buffer = new MovieBufferedConsumer(_audioSource, _maxCacheFrames);
-        _audioRenderer = AudioRenderer::from(buffer, audioStream->time_base, _thread, (AVSampleFormat)audioStream->codecpar->format, audioStream->codecpar->ch_layout, audioStream->codecpar->sample_rate, audioStream->codecpar->frame_size);
+        _audioRenderer = AudioRenderer::from(buffer, stream->time_base, _thread, (AVSampleFormat)codecpar->format, codecpar->ch_layout, codecpar->sample_rate, codecpar->frame_size);
     }
-    if (AVStream* videoStream = _source->stream(AVMEDIA_TYPE_VIDEO)) {
+    if (_videoSource) {
+        AVStream* stream = _videoSource->stream();
         RefPtr<MovieBufferedConsumer> buffer = new MovieBufferedConsumer(_videoSource->convert(format), _maxCacheFrames);
-        _videoRenderer = VideoRenderer::from(buffer, videoStream->time_base, render);
+        _videoRenderer = VideoRenderer::from(buffer, stream->time_base, _thread, stream->r_frame_rate, render);
     }
     if (_audioRenderer && _videoRenderer) _audioRenderer->attach(_videoRenderer);
 }
@@ -92,6 +95,8 @@ void MoviePlayer::play(bool state) {
     _isPlaying = state;
     if (_audioRenderer) {
         _thread->runOnThread([_audioRenderer = _audioRenderer, state]() { _audioRenderer->play(state); });
+    } else if (_videoRenderer) {
+        _thread->runOnThread([_videoRenderer = _videoRenderer, state]() { _videoRenderer->play(state); });
     }
 }
 
@@ -104,8 +109,8 @@ void MoviePlayer::seek(double time) {
             // 确保跳过一帧视频和所属的全部音频，避免seek完成后，播放时间不正确。
             _source->skip([this](AVPacket* packet) { return packet->stream_index == _videoSource->stream()->index; });
             _source->skip([this](AVPacket* packet) { return packet->stream_index == _videoSource->stream()->index; });
-            _audioRenderer->clear();
-            _videoRenderer->clear();
+            if (_audioRenderer) _audioRenderer->clear();
+            if (_videoRenderer) _videoRenderer->clear();
         }
     });
 }
@@ -119,8 +124,8 @@ void MoviePlayer::seek(double time, std::function<void(bool)> callback) {
             // 确保跳过一帧视频和所属的全部音频，避免seek完成后，播放时间不正确。
             _source->skip([this](AVPacket* packet) { return packet->stream_index == _videoSource->stream()->index; });
             _source->skip([this](AVPacket* packet) { return packet->stream_index == _videoSource->stream()->index; });
-            _audioRenderer->clear();
-            _videoRenderer->clear();
+            if (_audioRenderer) _audioRenderer->clear();
+            if (_videoRenderer) _videoRenderer->clear();
         }
         if (callback) {
             if (result) {
