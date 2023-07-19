@@ -6,23 +6,6 @@
 
 OMP_FFMPEG_USING_NAMESPACE
 
-MovieThread::ScheduledTask::ScheduledTask(double timeInterval, const std::function<bool()>& callback) : _schedule(std::chrono::steady_clock::now()), _timeInterval(int64_t(timeInterval* std::chrono::nanoseconds::period::den)), _callback(callback) {}
-
-std::chrono::steady_clock::time_point MovieThread::ScheduledTask::next() {
-    while (_schedule < std::chrono::steady_clock::now()) {
-        _schedule += _timeInterval;
-    }
-    return _schedule;
-}
-
-bool MovieThread::ScheduledTask::available() const {
-    return _schedule < std::chrono::steady_clock::now();
-}
-
-bool MovieThread::ScheduledTask::exec() {
-    return _callback();
-}
-
 void MovieThread::run() {
     _isRunning = true;
 
@@ -35,7 +18,12 @@ void MovieThread::run() {
                 timeout = next;
             }
         }
-        _event->wait([this, &movies]() -> bool { return available(movies) || !_tasks->empty(); }, timeout);
+        _event->wait([this, &movies]() -> bool {
+            if (available(movies)) return true;
+
+            std::lock_guard<std::mutex> lock(_mutex);
+            return !_tasks.empty();
+        }, timeout);
 
         while (!movies.empty()) {
             std::list<RefPtr<MovieSource>> finished;
@@ -53,14 +41,7 @@ void MovieThread::run() {
                 movies.remove(movie);
             }
         }
-
-        _tasks->exec();
-        std::list<RefPtr<ScheduledTask>> schedules = _schedules;
-        for (RefPtr<ScheduledTask> schedule : schedules) {
-            if (schedule->available() && !schedule->exec()) {
-                _schedules.remove(schedule);
-            }
-        }
+        doWork();
     }
 
     if (_thread && _thread->get_id() == std::this_thread::get_id()) {
@@ -79,19 +60,6 @@ void MovieThread::add(RefPtr<MovieSource> movie) {
 
 void MovieThread::remove(RefPtr<MovieSource> movie) {
     runOnThread([this, movie]() { _movies.remove(movie); });
-}
-
-RefPtr<MovieThread::ScheduledTask> MovieThread::schedule(double timeInterval, const std::function<bool()>& callback) {
-    RefPtr<ScheduledTask> task = new ScheduledTask(timeInterval, callback);
-    runOnThread([this, task]() {
-        _schedules.push_back(task);
-        _event->signal();
-    });
-    return task;
-}
-
-void MovieThread::cancel(RefPtr<ScheduledTask> task) {
-    runOnThread([this, task]() { _schedules.remove(task); });
 }
 
 bool MovieThread::available(std::list<RefPtr<MovieSource>>& list) const {

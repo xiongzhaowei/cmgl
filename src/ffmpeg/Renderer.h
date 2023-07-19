@@ -27,8 +27,8 @@ private:
     RefPtr<MovieBufferedConsumer> _buffer;
     std::function<void(RefPtr<Frame>)> _callback;
     AVRational _frame_rate;
-    RefPtr<MovieThread> _thread;
-    RefPtr<MovieThread::ScheduledTask> _schedule;
+    RefPtr<Thread> _thread;
+    RefPtr<Thread::ScheduledTask> _schedule;
 };
 
 class AudioRenderer : public Object {
