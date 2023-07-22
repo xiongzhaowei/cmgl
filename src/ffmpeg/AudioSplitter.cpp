@@ -6,7 +6,7 @@
 
 OMP_FFMPEG_USING_NAMESPACE
 
-AudioSplitter::AudioSplitter(RefPtr<StreamConsumer<Frame>> output, int32_t nb_samples) : _output(output), _sampleTotal(nb_samples) {
+AudioSplitter::AudioSplitter(RefPtr<StreamConsumer<Frame>> output, AVSampleFormat format, AVChannelLayout ch_layout, int32_t sample_rate, int32_t nb_samples) : _output(output), _format(format), _ch_layout(ch_layout), _sample_rate(sample_rate), _sampleTotal(nb_samples) {
     assert(output != nullptr);
     assert(nb_samples > 0);
 }
@@ -23,7 +23,7 @@ void AudioSplitter::copyData(uint8_t** data, int32_t offset, int32_t count, int3
         _output->add(_frame);
 
         if (count > 0) {
-            _frame = Frame::alloc((AVSampleFormat)_frame->frame()->format, _frame->frame()->ch_layout, _sampleTotal, _frame->frame()->sample_rate);
+            _frame = Frame::alloc(_format, _ch_layout, _sampleTotal, _sample_rate);
             _sampleCount = 0;
             copyData(data, offset, count, nb_channels);
         } else {

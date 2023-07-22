@@ -42,6 +42,7 @@ public:
 	void hide() override;
 	void close() override;
 	void setCaptureView(RefPtr<View> view) override;
+	void setTitle(const std::wstring& title) override;
 	bool showWindow(int nCmdShow);
 	RefPtr<render::RenderSource> renderLayer() override;
 	void setNeedsDisplay() override;

@@ -271,6 +271,7 @@ void PlayerWindowController::open(const std::string& path) {
 	if (!_player->ready()) {
 		_player->open(path);
 	}
+	if (!_player->ready()) return;
 	if (_window->handle() == nullptr) {
 		glm::vec2 size = glm::vec2(_player->width(), _player->height());
 		float scale = std::max(size.x / 1024, size.y / 768);

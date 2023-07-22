@@ -12,7 +12,16 @@ RefPtr<MoviePlayer> MoviePlayer::file(const std::string& path, RefPtr<MovieThrea
 }
 
 bool MoviePlayer::open(RefPtr<MovieFile> file, RefPtr<MovieThread> thread) {
-    RefPtr<MovieSource> source = new MovieSource;
+    RefPtr<MovieSource> source = new MovieSource([this](bool available) {
+        if (!available) return false;
+        if (_audioRenderer && _audioRenderer->size() > 100) {
+            return false;
+        }
+        if (_videoRenderer && _videoRenderer->size() > 100) {
+            return false;
+        }
+        return available;
+    });
     if (!source->open(file)) return false;
 
     RefPtr<MovieSourceStream> audioSource = MovieSourceStream::audio(source);
@@ -30,7 +39,16 @@ bool MoviePlayer::open(RefPtr<MovieFile> file, RefPtr<MovieThread> thread) {
 }
 
 bool MoviePlayer::open(const std::string& path, RefPtr<MovieThread> thread) {
-    RefPtr<MovieSource> source = new MovieSource;
+    RefPtr<MovieSource> source = new MovieSource([this](bool available) {
+        if (!available) return false;
+        if (_audioRenderer && _audioRenderer->size() > 30) {
+            return false;
+        }
+        if (_videoRenderer && _videoRenderer->size() > 30) {
+            return false;
+        }
+        return available;
+    });
     if (!source->open(path)) return false;
 
     RefPtr<MovieSourceStream> audioSource = MovieSourceStream::audio(source);
@@ -49,14 +67,16 @@ bool MoviePlayer::open(const std::string& path, RefPtr<MovieThread> thread) {
 
 void MoviePlayer::close() {
     _thread->runOnThread([this]() {
-        _audioRenderer->play(false);
-        _audioRenderer->attach(nullptr);
-        _audioRenderer->close();
         _thread->remove(_source);
         _thread = nullptr;
         _source->close();
         _source = nullptr;
-        _audioRenderer = nullptr;
+        if (_audioRenderer) {
+            _audioRenderer->play(false);
+            _audioRenderer->attach(nullptr);
+            _audioRenderer->close();
+            _audioRenderer = nullptr;
+        }
         _videoRenderer = nullptr;
         _audioSource = nullptr;
         _videoSource = nullptr;
@@ -65,7 +85,7 @@ void MoviePlayer::close() {
 }
 
 bool MoviePlayer::ready() const {
-    return _source != nullptr;
+    return _source != nullptr && _source->context() != nullptr;
 }
 
 bool MoviePlayer::isPlaying() const {
@@ -107,16 +127,8 @@ void MoviePlayer::play(bool state) {
 void MoviePlayer::seek(double time) {
     if (_thread == nullptr) return;
 
-    _thread->runOnThread([this, time]() {
-        bool result = _source->seek(time);
-        if (result) {
-            // 确保跳过一帧视频和所属的全部音频，避免seek完成后，播放时间不正确。
-            _source->skip([this](AVPacket* packet) { return packet->stream_index == _videoSource->stream()->index; });
-            _source->skip([this](AVPacket* packet) { return packet->stream_index == _videoSource->stream()->index; });
-            if (_audioRenderer) _audioRenderer->clear();
-            if (_videoRenderer) _videoRenderer->clear();
-        }
-    });
+    std::function<void(bool)> callback;
+    seek(time, callback);
 }
 
 void MoviePlayer::seek(double time, std::function<void(bool)> callback) {
@@ -126,6 +138,7 @@ void MoviePlayer::seek(double time, std::function<void(bool)> callback) {
         bool result = _source->seek(time);
         if (result) {
             // 确保跳过一帧视频和所属的全部音频，避免seek完成后，播放时间不正确。
+            // 实际效果：大大减少进度条闪动的概率，但依然存在进度条闪动的可能性。
             _source->skip([this](AVPacket* packet) { return packet->stream_index == _videoSource->stream()->index; });
             _source->skip([this](AVPacket* packet) { return packet->stream_index == _videoSource->stream()->index; });
             if (_audioRenderer) _audioRenderer->clear();

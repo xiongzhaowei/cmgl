@@ -56,6 +56,8 @@ template <typename T>
 class StreamController : public StreamConsumer<T> {
 public:
     virtual RefPtr<Stream<T>> stream() = 0;
+    virtual bool available() const = 0;
+    virtual bool available(bool initial, const std::function<bool(bool, bool)>& every) const = 0;
 
     static RefPtr<StreamController<T>> sync();
 };
@@ -83,7 +85,7 @@ public:
     }
     void close() override {
         _mutex.lock();
-        std::list<RefPtr<StreamConsumer<T>>> consumers = _consumers;
+        std::list<RefPtr<StreamConsumer<T>>> consumers = std::move(_consumers);
         _mutex.unlock();
         for (RefPtr<StreamConsumer<T>> consumer : consumers) {
             consumer->close();
@@ -99,6 +101,19 @@ public:
             if (!consumer->available()) return false;
         }
         return true;
+    }
+    bool available(bool initial, const std::function<bool(bool, bool)>& every) const override {
+        _mutex.lock();
+        std::list<RefPtr<StreamConsumer<T>>> consumers = _consumers;
+        _mutex.unlock();
+
+        if (consumers.empty()) return false;
+
+        bool value = initial;
+        for (RefPtr<StreamConsumer<T>> consumer : consumers) {
+            value = every(value, consumer->available());
+        }
+        return value;
     }
     RefPtr<Stream<T>> stream() override {
         class _Stream : public Stream<T> {

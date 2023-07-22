@@ -80,6 +80,7 @@ RefPtr<Frame> VideoConverter::convert(RefPtr<Frame> input) {
 RefPtr<VideoConverter> VideoConverter::create(AVCodecParameters* codecpar, AVPixelFormat format) {
     if (codecpar == nullptr) return nullptr;
     if (codecpar->codec_type != AVMEDIA_TYPE_VIDEO) return nullptr;
+    if (codecpar->format <= AV_PIX_FMT_NONE || codecpar->format >= AV_PIX_FMT_NB) return nullptr;
 
     int width = codecpar->width;
     int height = codecpar->height;

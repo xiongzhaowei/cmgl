@@ -296,6 +296,7 @@ public:
 	virtual void close() = 0;
 	virtual RefPtr<render::RenderSource> renderLayer() = 0;
 	virtual void setNeedsDisplay() = 0;
+	virtual void setTitle(const std::wstring& title) = 0;
 	virtual std::optional<intptr_t> handleMouseEvent(const MouseEvent& event) = 0;
 	virtual std::optional<intptr_t> handleKeyboardEvent(const KeyboardEvent& event) = 0;
 	virtual std::optional<intptr_t> handleNativeEvent(const NativeEvent& event) = 0;
@@ -318,6 +319,7 @@ public:
 	virtual void onDestroyWindow();
 
 	virtual void layoutWindow();
+	virtual std::optional<LRESULT> handleMouseEvent(const MouseEvent& event);
 };
 
 OMP_UI_NAMESPACE_END

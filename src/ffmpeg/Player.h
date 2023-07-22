@@ -7,7 +7,7 @@
 OMP_FFMPEG_NAMESPACE_BEGIN
 
 class MoviePlayer : public Object {
-    const uint32_t _maxCacheFrames = 2;
+    const uint32_t _maxCacheFrames = 8;
     RefPtr<MovieThread> _thread;
     RefPtr<MovieSource> _source;
     RefPtr<MovieSourceStream> _audioSource;

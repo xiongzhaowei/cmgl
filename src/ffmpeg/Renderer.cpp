@@ -41,9 +41,10 @@ RefPtr<AudioRenderer> AudioRenderer::from(RefPtr<MovieBufferedConsumer> buffer, 
             ch_layout, AV_SAMPLE_FMT_FLT, sample_rate,
             ch_layout, format, sample_rate
         );
+        format = AV_SAMPLE_FMT_FLT;
         break;
     }
-    RefPtr<AudioRenderer> renderer = new AudioRenderer(thread, buffer, converter, av_q2d(time_base));
+    RefPtr<AudioRenderer> renderer = new AudioRenderer(thread, buffer, converter, format, ch_layout, av_q2d(time_base));
     spec.userdata = renderer.value();
     renderer->retain();
     renderer->_device = SDL_OpenAudioDevice(nullptr, 0, &spec, nullptr, 0);
@@ -54,8 +55,10 @@ AudioRenderer::AudioRenderer(
     RefPtr<Thread> thread,
     RefPtr<MovieBufferedConsumer> buffer,
     RefPtr<AudioConverter> converter,
+    AVSampleFormat format,
+    AVChannelLayout ch_layout,
     double time_base
-) : _thread(thread), _buffer(buffer), _converter(converter), _time_base(time_base), _device(0), _volume(1) {
+) : _thread(thread), _buffer(buffer), _converter(converter), _format(format), _ch_layout(ch_layout), _time_base(time_base), _device(0), _timestamp(0), _volume(1) {
 
 }
 
@@ -67,78 +70,125 @@ void AudioRenderer::setVolume(double volume) {
     _volume = volume;
 }
 
-void AudioRenderer::fill(AVSampleFormat format, uint8_t* dst, uint8_t* src, size_t count, double volume) {
+template <typename T>
+static typename std::enable_if<std::is_unsigned<T>::value>::type
+mixAudio(T* dst, T* src, size_t count, double volume) {
+    typedef typename std::make_signed<T>::type signed_t;
+    constexpr signed_t minValue = static_cast<signed_t>(T(1) << (sizeof(T) * 8 - 1));
+    constexpr signed_t maxValue = ~minValue;
+
+    for (size_t i = 0; i < count; i++) {
+        dst[i] = std::clamp(signed_t(signed_t(src[i] + minValue) * volume), minValue, maxValue) - minValue;
+    }
+}
+
+template <typename T>
+static typename std::enable_if<std::is_integral<T>::value && std::is_signed<T>::value>::type
+mixAudio(T* dst, T* src, size_t count, double volume) {
+    constexpr T minValue = static_cast<T>(typename std::make_unsigned<T>::type(1) << (sizeof(T) * 8 - 1));
+    constexpr T maxValue = ~minValue;
+
+    for (size_t i = 0; i < count; i++) {
+        dst[i] = std::clamp(T(src[i] * volume), minValue, maxValue);
+    }
+}
+
+template <typename T>
+static typename std::enable_if<std::is_floating_point<T>::value>::type
+mixAudio(T* dst, T* src, size_t count, double volume) {
+    for (size_t i = 0; i < count; i++) {
+        dst[i] = std::clamp<T>(T(src[i] * volume), -1, 1);
+    }
+}
+
+static void mixAudio(AVSampleFormat format, uint8_t* dst, uint8_t* src, size_t count, double volume) {
     switch (av_get_alt_sample_fmt(format, 0)) {
-    case AV_SAMPLE_FMT_U8:
-        for (size_t i = 0; i < count; i++) {
-            dst[i] = std::clamp<int16_t>((src[i] + INT8_MIN) * volume, INT8_MIN, INT8_MAX) - INT8_MIN;
-        }
-        break;
-    case AV_SAMPLE_FMT_S16:
-        for (size_t i = 0; i < count; i++) {
-            ((int16_t*)dst)[i] = std::clamp<int16_t>(((int16_t*)src)[i] * volume, INT16_MIN, INT16_MAX);
-        }
-        break;
-    case AV_SAMPLE_FMT_S32:
-        for (size_t i = 0; i < count; i++) {
-            ((int32_t*)dst)[i] = std::clamp<int32_t>(((int32_t*)src)[i] * volume, INT32_MIN, INT32_MAX);
-        }
-        break;
-    case AV_SAMPLE_FMT_S64:
-        for (size_t i = 0; i < count; i++) {
-            ((int64_t*)dst)[i] = std::clamp<int64_t>(((int64_t*)src)[i] * volume, INT64_MIN, INT64_MAX);
-        }
-        break;
-    case AV_SAMPLE_FMT_FLT:
-        for (size_t i = 0; i < count; i++) {
-            ((float*)dst)[i] = std::clamp<float>(((float*)src)[i] * volume, -1, 1);
-        }
-        break;
-    case AV_SAMPLE_FMT_DBL:
-        for (size_t i = 0; i < count; i++) {
-            ((double*)dst)[i] = std::clamp<double>(((double*)src)[i] * volume, -1, 1);
-        }
-        break;
-    default:
-        memcpy(dst, src, count * av_get_bytes_per_sample(format));
-        break;
+    case AV_SAMPLE_FMT_U8: mixAudio<uint8_t>(dst, src, count, volume); break;
+    case AV_SAMPLE_FMT_S16: mixAudio<int16_t>((int16_t*)dst, (int16_t*)src, count, volume); break;
+    case AV_SAMPLE_FMT_S32: mixAudio<int32_t>((int32_t*)dst, (int32_t*)src, count, volume); break;
+    case AV_SAMPLE_FMT_S64: mixAudio<int64_t>((int64_t*)dst, (int64_t*)src, count, volume); break;
+    case AV_SAMPLE_FMT_FLT: mixAudio<float>((float*)dst, (float*)src, count, volume); break;
+    case AV_SAMPLE_FMT_DBL: mixAudio<double>((double*)dst, (double*)src, count, volume); break;
+    default: memcpy(dst, src, count * av_get_bytes_per_sample(format)); break;
     }
 }
 
 void AudioRenderer::fill(uint8_t* stream, int len) {
     RefPtr<AudioRenderer> self = this;
-    RefPtr<Frame> frame = _buffer->pop();
-    if (frame != nullptr && _converter != nullptr) {
-        frame = _converter->convert(frame);
+
+    int32_t bytesPerSample = av_get_bytes_per_sample(_format);
+    int32_t nb_channels = _ch_layout.nb_channels;
+    int32_t total_samples = len / bytesPerSample / nb_channels;
+
+    int32_t offset = 0;
+
+    if (_frame == nullptr) {
+        _frame = _buffer->pop();
+        if (_frame != nullptr && _converter != nullptr) {
+            _frame = _converter->convert(_frame);
+        }
+        if (_frame != nullptr) {
+            _timestamp = _frame->timestamp() * _time_base;
+        }
     }
-
-    if (frame != nullptr) {
-        double pts = frame->timestamp() * _time_base;
-
-        AVSampleFormat format = (AVSampleFormat)frame->frame()->format;
-        int32_t bytesPerSample = av_get_bytes_per_sample(format);
-        int32_t nb_channels = frame->frame()->ch_layout.nb_channels;
-        int32_t count = std::max(std::min(frame->frame()->linesize[0], len), 0);
-        if (av_sample_fmt_is_planar(format)) {
-            count /= bytesPerSample * nb_channels;
-            for (int32_t i = 0; i < count; i++) {
+    while (_frame && _frame->frame()->nb_samples - _frameOffset > 0 && total_samples - offset > 0) {
+        int32_t nb_samples = std::min(_frame->frame()->nb_samples - _frameOffset, total_samples - offset);
+        if (av_sample_fmt_is_planar(_format)) {
+            for (int32_t i = 0; i < nb_samples; i++) {
                 for (int32_t channel = 0; channel < nb_channels; channel++) {
                     memcpy(
-                        stream + i * bytesPerSample * nb_channels + channel * bytesPerSample,
-                        frame->frame()->extended_data[channel] + i * bytesPerSample,
+                        stream + (offset + i) * bytesPerSample * nb_channels + channel * bytesPerSample,
+                        _frame->frame()->extended_data[channel] + (_frameOffset + i) * bytesPerSample,
                         bytesPerSample
                     );
                 }
             }
-            fill(format, stream, stream, count * nb_channels, _volume);
+            if (_volume != 1) {
+                mixAudio(
+                    _format,
+                    stream + offset * bytesPerSample * nb_channels,
+                    stream + offset * bytesPerSample * nb_channels,
+                    nb_samples * nb_channels,
+                    _volume
+                );
+            }
         } else {
-            fill(format, stream, frame->frame()->extended_data[0], count / bytesPerSample, _volume);
+            mixAudio(
+                _format,
+                stream + offset * bytesPerSample * nb_channels,
+                _frame->frame()->extended_data[0] + _frameOffset * bytesPerSample * nb_channels,
+                nb_samples * nb_channels,
+                _volume
+            );
         }
-        _thread->runOnThread([self, pts]() {
-            if (self->_attached) self->_attached->sync(pts);
-        });
-        frame = nullptr;
+        offset += nb_samples;
+        _frameOffset += nb_samples;
+
+        if (_frame->frame()->nb_samples - _frameOffset == 0) {
+            _frame = _buffer->pop();
+            _frameOffset = 0;
+            if (_frame != nullptr && _converter != nullptr) {
+                _frame = _converter->convert(_frame);
+            }
+            if (_frame != nullptr) {
+                _timestamp = _frame->timestamp() * _time_base;
+            }
+        }
     }
+    if (total_samples - offset > 0) {
+        int32_t count = total_samples - offset;
+        _timestamp += count * _time_base;
+        mixAudio(
+            _format,
+            stream + offset * bytesPerSample * nb_channels,
+            stream + offset * bytesPerSample * nb_channels,
+            count * nb_channels,
+            0.8
+        );
+    }
+    _thread->runOnThread([self]() {
+        if (self->_attached) self->_attached->sync(self->_timestamp);
+    });
 }
 
 void AudioRenderer::attach(VideoRenderer* renderer) {
@@ -161,12 +211,12 @@ void AudioRenderer::close() {
     }
 }
 
+size_t AudioRenderer::size() const {
+    return _buffer ? _buffer->size() : 0;
+}
+
 int64_t AudioRenderer::timestamp() const {
-    int64_t ts = _buffer->timestamp();
-    if (ts != -1) {
-        return ts * _time_base * AV_TIME_BASE;
-    }
-    return -1;
+    return int64_t(_timestamp * AV_TIME_BASE);
 }
 
 RefPtr<VideoRenderer> VideoRenderer::from(
@@ -190,7 +240,7 @@ VideoRenderer::~VideoRenderer() {
 void VideoRenderer::play(bool state) {
     if (state) {
         if (_schedule == nullptr) {
-            _schedule = _thread->schedule(1.0 / av_q2d(_frame_rate), [this]() {
+            _schedule = _thread->schedule(1.0 / av_q2d(_frame_rate), [this, self = RefPtr<VideoRenderer>(this)]() {
                 RefPtr<Frame> frame = _buffer->pop();
                 if (frame != nullptr) _callback(frame);
                 return true;
@@ -213,6 +263,10 @@ void VideoRenderer::sync(double pts) {
 
 void VideoRenderer::clear() {
     if (_buffer) _buffer->clear();
+}
+
+size_t VideoRenderer::size() const {
+    return _buffer ? _buffer->size() : 0;
 }
 
 int64_t VideoRenderer::timestamp() const {

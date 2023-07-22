@@ -9,6 +9,9 @@ OMP_FFMPEG_USING_NAMESPACE
 MovieSource::MovieSource() : _packet(new Packet), _controller(StreamController<Packet>::sync()) {
 }
 
+MovieSource::MovieSource(std::function<bool(bool)> available) : _available(available), _packet(new Packet), _controller(StreamController<Packet>::sync()) {
+}
+
 bool MovieSource::open(RefPtr<MovieFile> file) {
 	AVFormatContext* context = avformat_alloc_context();
 	context->pb = avio_alloc_context(
@@ -24,6 +27,7 @@ bool MovieSource::open(RefPtr<MovieFile> file) {
 	if (Error::verify(avformat_open_input(&context, nullptr, nullptr, nullptr), __FUNCSIG__, __LINE__)) {
 		if (Error::verify(avformat_find_stream_info(context, nullptr), __FUNCSIG__, __LINE__)) {
 			_context = context;
+			_file = file;
 			return true;
 		}
 		avformat_close_input(&context);
@@ -45,7 +49,9 @@ bool MovieSource::open(const std::string& filename) {
 }
 
 void MovieSource::close() {
-	avformat_close_input(&_context);
+	if (_context) avformat_close_input(&_context);
+	if (_file) _file = nullptr;
+	if (_controller) _controller->close();
 }
 
 AVFormatContext* MovieSource::context() const {
@@ -63,11 +69,20 @@ AVStream* MovieSource::stream(AVMediaType codecType) const {
 }
 
 bool MovieSource::available() const {
-	return _controller->available();
+	bool result = _controller->available(false, [](bool first, bool second) { return first || second; });
+	return  _available ? _available(result) : result;
 }
 
 bool MovieSource::read() {
-	if (Error::verify(av_read_frame(_context, _packet->packet()), __FUNCSIG__, __LINE__)) {
+	if (_context == nullptr) return false;
+
+	int result = av_read_frame(_context, _packet->packet());
+	if (AVERROR_EOF == result) {
+		close();
+		return false;
+	}
+
+	if (Error::verify(result, __FUNCSIG__, __LINE__)) {
 		_controller->add(_packet);
 		_packet->reset();
 		return true;
@@ -293,6 +308,11 @@ RefPtr<Frame> MovieBufferedConsumer::pop(int64_t timestamp) {
 	RefPtr<Frame> frame = _list.front();
 	_list.pop_front();
 	return frame;
+}
+
+bool MovieBufferedConsumer::empty() {
+	std::lock_guard<std::mutex> lock(_mutex);
+	return _list.empty();
 }
 
 void MovieBufferedConsumer::clear() {

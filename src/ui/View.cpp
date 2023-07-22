@@ -519,3 +519,7 @@ void WindowController::onDestroyWindow() {
 void WindowController::layoutWindow() {
 
 }
+
+std::optional<LRESULT> WindowController::handleMouseEvent(const MouseEvent& event) {
+	return std::nullopt;
+}

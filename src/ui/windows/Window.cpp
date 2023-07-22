@@ -142,6 +142,10 @@ void PlatformWindow::setCaptureView(RefPtr<View> view) {
 	Window::setCaptureView(view);
 }
 
+void PlatformWindow::setTitle(const std::wstring& title) {
+	SetWindowText(_hWnd, title.c_str());
+}
+
 RefPtr<render::RenderSource> PlatformWindow::renderLayer() {
 	if (_renderLayer == nullptr) _renderLayer = new render::RGBAVideoSource;
 	return _renderLayer;

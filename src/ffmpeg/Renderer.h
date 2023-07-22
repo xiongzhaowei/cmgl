@@ -21,6 +21,7 @@ public:
     void play(bool state);
     void sync(double pts);
     void clear();
+    size_t size() const;
     int64_t timestamp() const;
 private:
     double _time_base;
@@ -42,7 +43,7 @@ public:
         int32_t sample_rate,
         int32_t frame_size
     );
-    AudioRenderer(RefPtr<Thread> thread, RefPtr<MovieBufferedConsumer> buffer, RefPtr<AudioConverter> converter, double time_base);
+    AudioRenderer(RefPtr<Thread> thread, RefPtr<MovieBufferedConsumer> buffer, RefPtr<AudioConverter> converter, AVSampleFormat format, AVChannelLayout ch_layout, double time_base);
 
     double volume() const;
     void setVolume(double volume);
@@ -53,6 +54,7 @@ public:
     void play(bool state);
     void clear();
     void close();
+    size_t size() const;
     int64_t timestamp() const;
 private:
     double _time_base;
@@ -60,7 +62,12 @@ private:
     RefPtr<AudioConverter> _converter;
     RefPtr<VideoRenderer> _attached;
     RefPtr<Thread> _thread;
+    RefPtr<Frame> _frame;
+    int32_t _frameOffset = 0;
+    AVSampleFormat _format;
+    AVChannelLayout _ch_layout;
     uint32_t _device;
+    double _timestamp;
     double _volume;
 };
 

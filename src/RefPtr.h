@@ -27,10 +27,11 @@ public:
     void retain() { if (_value) { retain(_value); } }
     void release() {
         if (_value) {
-            if (release(_value)) {
-                destroy(_value);
-            }
+            T* value = _value;
             _value = nullptr;
+            if (release(value)) {
+                destroy(value);
+            }
         }
     }
     static void retain(T *value);

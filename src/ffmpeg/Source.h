@@ -19,9 +19,12 @@ public:
 class MovieSource : public Stream<Packet> {
     RefPtr<StreamController<Packet>> _controller;
     RefPtr<Packet> _packet;
+    RefPtr<MovieFile> _file;
     AVFormatContext* _context = nullptr;
+    mutable std::function<bool(bool)> _available;
 public:
     MovieSource();
+    MovieSource(std::function<bool(bool)> available);
     bool open(RefPtr<MovieFile> file);
     bool open(const std::string& filename);
     void close();
@@ -102,6 +105,7 @@ public:
     void push(RefPtr<Frame> frame);
     RefPtr<Frame> pop();
     RefPtr<Frame> pop(int64_t timestamp);
+    bool empty();
     void clear();
 };
 
