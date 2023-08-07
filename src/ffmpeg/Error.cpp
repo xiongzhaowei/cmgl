@@ -11,10 +11,6 @@ static std::string __av_err2str(int error) {
     return av_make_error_string(message, AV_ERROR_MAX_STRING_SIZE, error);
 }
 
-void Error::print() {
-    printf("Error:\n\tfrom: %s(%d)\n\tcode: %d\n\tmessage: %s\n", method.c_str(), line, code, message.c_str());
-}
-
 bool Error::verify(int error, const char* method, int line) {
     if (error < 0) {
         report(error, method, line);
@@ -24,11 +20,17 @@ bool Error::verify(int error, const char* method, int line) {
 }
 
 void Error::report(int error, const char* method, int line) {
-    RefPtr<Error> e = new Error;
-    e->code = error;
-    e->message = __av_err2str(error);
-    e->method = method;
-    e->line = line;
+    std::string message = __av_err2str(error);
+    printf("Error:\n\tfrom: %s(%d)\n\tcode: %d\n\tmessage: %s\n", method, line, error, message.c_str());
+}
 
-    e->print();
+AVError::AVError(int error, const char* method, int line) {
+    this->code = error;
+    this->message = __av_err2str(error);
+    this->method = method;
+    this->line = line;
+}
+
+RefPtr<Error> AVError::from(int error, const char* method, int line) {
+    return error < 0 ? new AVError(error, method, line) : nullptr;
 }

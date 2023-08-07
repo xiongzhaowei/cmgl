@@ -31,6 +31,28 @@ RefPtr<Token> Token::Get() {
 	return shared;
 }
 
+gdiplus::ImageData::ImageData(Gdiplus::Bitmap* pImage) : m_pImage(pImage) {
+	assert(pImage != nullptr);
+}
+
+gdiplus::ImageData::~ImageData() {
+	if (m_pImage) {
+		delete m_pImage;
+		m_pImage = nullptr;
+	}
+}
+
+void gdiplus::ImageData::load(const std::function<void(int32_t width, int32_t height, int32_t stride, void* bytes)>& callback) {
+	if (m_pImage) {
+		Gdiplus::Rect rect(0, 0, width(), height());
+		Gdiplus::BitmapData bitmapData = { 0 };
+		if (m_pImage->LockBits(&rect, Gdiplus::ImageLockModeRead, PixelFormat32bppPARGB, &bitmapData) == Gdiplus::Status::Ok) {
+			callback(bitmapData.Width, bitmapData.Height, bitmapData.Stride, bitmapData.Scan0);
+			m_pImage->UnlockBits(&bitmapData);
+		}
+	}
+}
+
 gdiplus::Image::Image(Gdiplus::Bitmap* pImage) : m_pImage(pImage) {
 	assert(pImage != nullptr);
 }
@@ -456,6 +478,15 @@ void StaticLayer::SetContent(Image* pImage) {
 	m_spContent = pImage;
 }
 
+bool StaticLayer::Hidden() const {
+	return m_bHidden;
+}
+
+void StaticLayer::SetHidden(bool hidden) {
+	if (m_spParentLayer) m_spParentLayer->SetNeedsDisplay();
+	m_bHidden = hidden;
+}
+
 void StaticLayer::SetNeedsDisplay() {
 	m_bNeedsDisplay = true;
 	if (m_spParentLayer) m_spParentLayer->SetNeedsDisplay();
@@ -516,6 +547,11 @@ void StaticLayer::Paint(Graphics* pGraphics, Matrix* pMatrix) const {
 	assert(pGraphics != nullptr);
 	assert(pMatrix != nullptr);
 
+	if (Hidden()) {
+		if (m_spFramebuffer) m_spFramebuffer->m_spGraphics->Clear(0);
+		return;
+	}
+
 	RefPtr<Matrix> pCurrent = pMatrix->Clone();
 	pCurrent->Translate(m_fPositionX, m_fPositionY);
 	pCurrent->Rotate(m_fRotate);
@@ -564,12 +600,12 @@ void StaticLayer::Paint(Graphics* pGraphics, Matrix* pMatrix) const {
 		if (m_spShadowBuffer) {
 			pGraphics->DrawImage(
 				m_spShadowBuffer,
-				Gdiplus::RectF(0, 0, m_spShadowBuffer->Width(), m_spShadowBuffer->Height()),
+				Gdiplus::RectF(0, 0, m_spShadowBuffer->width(), m_spShadowBuffer->height()),
 				Gdiplus::RectF(
 					-m_fShadowRadius * 2 + m_fShadowOffsetX,
 					-m_fShadowRadius * 2 + m_fShadowOffsetY,
-					m_spShadowBuffer->Width(),
-					m_spShadowBuffer->Height()
+					m_spShadowBuffer->width(),
+					m_spShadowBuffer->height()
 				),
 				pCurrent
 			);
@@ -692,12 +728,20 @@ void gdiplus::Layer::setNeedsDisplay() {
 	_layer->SetNeedsDisplay();
 }
 
-void* gdiplus::Layer::content() const {
+Object* gdiplus::Layer::content() const {
 	return _layer->Content();
 }
 
-void gdiplus::Layer::setContent(void* image) {
-	_layer->SetContent((gdiplus::Image*)image);
+void gdiplus::Layer::setContent(Object* image) {
+	_layer->SetContent(RefPtr<Object>(image).as<gdiplus::Image>());
+}
+
+bool gdiplus::Layer::hidden() const {
+	return _layer->Hidden();
+}
+
+void gdiplus::Layer::setHidden(bool hidden) {
+	_layer->SetHidden(hidden);
 }
 
 void gdiplus::Layer::addLayer(ui::Layer* layer) {

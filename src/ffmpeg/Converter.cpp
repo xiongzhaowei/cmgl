@@ -65,7 +65,17 @@ RefPtr<Frame> VideoConverter::convert(RefPtr<Frame> input) {
     RefPtr<Frame> output = Frame::alloc(_format, _width, _height);
     if (nullptr == output) return nullptr;
 
-    if (sws_scale(_context, (const uint8_t* const*)input->frame()->data, input->frame()->linesize, 0, _height, output->frame()->data, output->frame()->linesize) > 0) {
+    int32_t error = sws_scale(_context, (const uint8_t* const*)input->frame()->data, input->frame()->linesize, 0, _height, output->frame()->data, output->frame()->linesize);
+    if (error == AVERROR(EINVAL) && input->frame()->format != AV_PIX_FMT_NONE) {
+        sws_freeContext(_context);
+        _context = sws_getContext(
+            _width, _height, (AVPixelFormat)input->frame()->format,
+            _width, _height, _format,
+            SWS_FAST_BILINEAR, NULL, NULL, NULL
+        );
+        error = sws_scale(_context, (const uint8_t* const*)input->frame()->data, input->frame()->linesize, 0, _height, output->frame()->data, output->frame()->linesize);
+    }
+    if (error > 0) {
         output->frame()->best_effort_timestamp = input->frame()->best_effort_timestamp;
         output->frame()->pts = input->frame()->pts;
         output->frame()->pkt_dts = input->frame()->pkt_dts;

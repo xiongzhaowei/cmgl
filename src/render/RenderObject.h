@@ -97,9 +97,9 @@ struct PanGestureEndedEvent : TouchEvent {};
 
 class RenderObject : public RenderSource {
 public:
-    bool enabled() const override;
-    void setEnabled(bool enabled) override;
+    vec4 backgroundColor() const { return vec4(0, 0, 0, 0); }
     vec2 size() const override;
+    bool visible() const override { return true; }
 
     void load(RefPtr<RenderContext> context) override = 0;
     void unload(RefPtr<RenderContext> context) override = 0;
@@ -115,7 +115,6 @@ public:
     
     EventController &events();
 protected:
-    bool _enabled;
     vec2 _size = vec2(0, 0);
     EventController _events;
 };

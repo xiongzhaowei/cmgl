@@ -56,7 +56,6 @@ void YUV420PRenderer::draw(
     const mat4 &colorConversion,
     const vec2 &size,
     GLfloat alpha,
-    GLuint texture,
     va_list list
 ) {
     context->setFramebuffer(framebuffer);
@@ -70,7 +69,7 @@ void YUV420PRenderer::draw(
             0, 1, 2, 1, 2, 3
     };
     _program->use();
-    _program->setUniformTexture(_texture1Location, 1, texture);
+    _program->setUniformTexture(_texture1Location, 1, va_arg(list, GLuint));
     _program->setUniformTexture(_texture2Location, 2, va_arg(list, GLuint));
     _program->setUniformTexture(_texture3Location, 3, va_arg(list, GLuint));
     _program->setUniform(_globalMatrixLocation, globalMatrix);

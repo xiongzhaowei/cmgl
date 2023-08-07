@@ -27,6 +27,7 @@ public:
     void setUniformTexture(GLint location, GLuint index, GLuint texture);
     void setUniform(GLint location, GLfloat value);
     void setUniform(GLint location, const vec2 &vec);
+    void setUniform(GLint location, const vec4 &vec);
     void setUniform(GLint location, const mat3 &matrix);
     void setUniform(GLint location, const mat4 &matrix);
 

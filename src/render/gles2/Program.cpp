@@ -133,6 +133,10 @@ void Program::setUniform(GLint location, const vec2 &vec) {
     GL_ERROR(glUniform2fv(location, 1, &vec[0]));
 }
 
+void Program::setUniform(GLint location, const vec4 &vec) {
+    GL_ERROR(glUniform4fv(location, 1, &vec[0]));
+}
+
 void Program::setUniform(GLint location, const mat3 &matrix) {
     GL_ERROR(glUniformMatrix3fv(location, 1, GL_FALSE, &matrix[0][0]));
 }

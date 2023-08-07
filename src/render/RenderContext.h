@@ -33,7 +33,7 @@ struct RenderContext : public Object {
         const mat4 &colorConversion,
         const vec2 &size,
         float alpha,
-        uint32_t texture, ...
+        ...
     );
 
     virtual void makeCurrent() = 0;

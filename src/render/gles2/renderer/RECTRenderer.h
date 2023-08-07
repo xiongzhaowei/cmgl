@@ -1,13 +1,13 @@
 ﻿//
-//  RGBARenderer.h
+//  RECTRenderer.h
 //  omrender
 //
-//  Created by 熊朝伟 on 2020/4/14.
+//  Created by 熊朝伟 on 2023/8/2.
 //
 
 OMP_RENDER_GLES2_NAMESPACE_BEGIN
 
-struct RGBARenderer : public Renderer {
+struct RECTRenderer : public Renderer {
 
     void load(RefPtr<RenderContext> context) override;
     void unload(RefPtr<RenderContext> context) override;
@@ -24,7 +24,7 @@ struct RGBARenderer : public Renderer {
     ) override;
 
 protected:
-    GLint _textureLocation = 0;
+    GLint _colorLocation = 0;
     GLint _positionLocation = 0;
     GLint _globalMatrixLocation = 0;
     GLint _localMatrixLocation = 0;

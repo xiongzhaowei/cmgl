@@ -6,16 +6,8 @@
 
 OMP_RENDER_USING_NAMESPACE
 
-bool DataSource::enabled() const {
-    return _enabled;
-}
-
-void DataSource::setEnabled(bool enabled) {
-    _enabled = enabled;
-}
-
 void DataSource::render(RefPtr<RenderContext> context, RefPtr<Framebuffer> framebuffer, const mat4 &globalMatrix) {
-    if (!enabled()) return;
+    if (!visible()) return;
     draw(context, framebuffer, globalMatrix, identity<mat4>(), identity<mat4>(), vec2(framebuffer->width(), framebuffer->height()), 1);
 }
 

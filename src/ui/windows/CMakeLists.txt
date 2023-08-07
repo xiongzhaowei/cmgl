@@ -1,4 +1,5 @@
-﻿target_sources(${PROJECT_NAME} PRIVATE
+﻿add_subdirectory("render")
+target_sources(${PROJECT_NAME} PRIVATE
     defines.cpp
     defines.h
     Layer.cpp

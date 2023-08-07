@@ -23,22 +23,33 @@ void YUV420SPVideoSource::unload(RefPtr<RenderContext> context) {
 void YUV420SPVideoSource::update(const AVFrame *frame) {
     assert(frame != nullptr);
 
+#define ALIGN(num, align) ((((num) - 1) | ((align) - 1)) + 1)
     std::lock_guard<std::mutex> lock(_lock);
 
+    int32_t linesize = frame->linesize[0];
     int32_t width = frame->width;
     int32_t height = frame->height;
-    int32_t size = width * height;
+    int32_t stride = ALIGN(width, 4);
+    int32_t size = stride * height;
+    _size = ivec2(width, height);
 
     _pixels1.resize(size);
-    memcpy(_pixels1.data(), frame->data[0], size);
+    for (int32_t y = 0; y < height; y++) {
+        memcpy(_pixels1.data() + stride * y, frame->data[0] + linesize * y, width);
+    }
 
-    size = (((size - 1) | 3) + 1) >> 2; // 2 bytes align and divide 2.
+    linesize = frame->linesize[1];
+    width = ALIGN(width, 2);
+    height = ALIGN(height, 2) >> 1;
+    size = stride * height;
 
-    _pixels2.resize(size * 2);
-    memcpy(_pixels2.data(), frame->data[1], size * 2);
+    _pixels2.resize(size);
+    for (int32_t y = 0; y < height; y++) {
+        memcpy(_pixels2.data() + stride * y, frame->data[1] + linesize * y, width);
+    }
 
-    _size = ivec2(width, height);
     _isNeedsUpdate = true;
+#undef ALIGN
 }
 
 bool YUV420SPVideoSource::support(const Type &type) {
@@ -62,5 +73,13 @@ void YUV420SPVideoSource::draw(
         _isNeedsUpdate = false;
     }
 
-    context->draw(Renderer::YUV420SP, framebuffer, globalMatrix, localMatrix, clipMatrix, Renderer::kColorConversionBT601FullRange, size, alpha, _texture1->data(), _texture2->data());
+    mat4 colorConversion = Renderer::kColorConversionBT709;
+#ifdef _WIN32
+    for (int i = 0; i < 4; i++) {
+        float value = colorConversion[i][0];
+        colorConversion[i][0] = colorConversion[i][2];
+        colorConversion[i][2] = value;
+    }
+#endif // _WIN32
+    context->draw(Renderer::YUV420SP, framebuffer, globalMatrix, localMatrix, clipMatrix, colorConversion, size, alpha, _texture1->data(), _texture2->data());
 }

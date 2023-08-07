@@ -42,6 +42,9 @@ void MovieThread::run() {
             }
         }
         doWork();
+        for (RefPtr<MovieSource> movie : _movies) {
+            movie->flush();
+        }
     }
 
     if (_thread && _thread->get_id() == std::this_thread::get_id()) {

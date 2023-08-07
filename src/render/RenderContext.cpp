@@ -82,7 +82,7 @@ void RenderContext::draw(
     const mat4 &colorConversion,
     const vec2 &size,
     GLfloat alpha,
-    GLuint texture, ...
+    ...
 ) {
     assert(_isEnabled);
     if (name == Renderer::None) return;
@@ -100,8 +100,8 @@ void RenderContext::draw(
     }
     
     va_list list;
-    va_start(list, texture);
-    renderer->draw(this, framebuffer, globalMatrix, localMatrix, clipMatrix, colorConversion, size, alpha, texture, list);
+    va_start(list, alpha);
+    renderer->draw(this, framebuffer, globalMatrix, localMatrix, clipMatrix, colorConversion, size, alpha, list);
     va_end(list);
 }
 

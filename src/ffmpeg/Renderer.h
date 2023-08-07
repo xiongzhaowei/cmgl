@@ -69,6 +69,7 @@ private:
     uint32_t _device;
     double _timestamp;
     double _volume;
+    std::atomic_bool _syncing = false;
 };
 
 OMP_FFMPEG_NAMESPACE_END

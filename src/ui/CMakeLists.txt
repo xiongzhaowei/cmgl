@@ -4,6 +4,8 @@ target_sources(${PROJECT_NAME} PRIVATE
     defines.h
     Type.cpp
     Type.h
+    Layer.cpp
+    Layer.h
     View.cpp
     View.h
     LayoutConstraint.cpp

@@ -317,10 +317,17 @@ void WinHTTPConnection::onFinished() {
 void WinHTTPConnection::onError(DWORD dwErrorCode) {
     if (m_pCompleter && m_pCompleter->isCompleted()) m_pCompleter->complete(nullptr);
     if (m_pStreamController) {
-        m_pStreamController->addError();
+        m_pStreamController->addError(new WinHTTPError(dwErrorCode, __FUNCSIG__, __LINE__));
         m_pStreamController->close();
         m_pStreamController = nullptr;
     }
     WinHttpSetStatusCallback(m_hRequest, NULL, WINHTTP_CALLBACK_FLAG_ALL_NOTIFICATIONS, 0);
     release();
+}
+
+WinHTTPError::WinHTTPError(DWORD error, const char* method, int line) {
+    this->code = error;
+    this->message = "";
+    this->method = method;
+    this->line = line;
 }

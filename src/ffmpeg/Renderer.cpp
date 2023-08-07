@@ -186,9 +186,13 @@ void AudioRenderer::fill(uint8_t* stream, int len) {
             0.8
         );
     }
-    _thread->runOnThread([self]() {
-        if (self->_attached) self->_attached->sync(self->_timestamp);
-    });
+    if (!_syncing) {
+        _syncing = true;
+        _thread->runOnThread([self]() {
+            self->_syncing = false;
+            if (self->_attached) self->_attached->sync(self->_timestamp);
+        });
+    }
 }
 
 void AudioRenderer::attach(VideoRenderer* renderer) {
@@ -242,7 +246,11 @@ void VideoRenderer::play(bool state) {
         if (_schedule == nullptr) {
             _schedule = _thread->schedule(1.0 / av_q2d(_frame_rate), [this, self = RefPtr<VideoRenderer>(this)]() {
                 RefPtr<Frame> frame = _buffer->pop();
-                if (frame != nullptr) _callback(frame);
+                if (frame != nullptr) {
+                    _callback(frame);
+                } else if (_buffer->eof()) {
+                    _callback(nullptr);
+                }
                 return true;
             });
         }
@@ -256,6 +264,9 @@ void VideoRenderer::play(bool state) {
 
 void VideoRenderer::sync(double pts) {
     int64_t timestamp = pts / _time_base;
+    if (_buffer->empty() && _buffer->eof()) {
+        _callback(nullptr);
+    }
     while (RefPtr<Frame> frame = _buffer->pop(timestamp)) {
         _callback(frame);
     }

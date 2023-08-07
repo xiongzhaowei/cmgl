@@ -6,12 +6,12 @@
 
 OMP_RENDER_USING_NAMESPACE
 
-bool RenderLayer::enabled() const {
-    return _enabled;
+vec4 RenderLayer::backgroundColor() const {
+    return _backgroundColor;
 }
 
-void RenderLayer::setEnabled(bool enabled) {
-    _enabled = enabled;
+void RenderLayer::setBackgroundColor(vec4 color) {
+    _backgroundColor = color;
 }
 
 vec2 RenderLayer::anchorPoint() const {
@@ -127,12 +127,42 @@ void RenderLayer::unload(RefPtr<RenderContext> context) {
 }
 
 void RenderLayer::render(RefPtr<RenderContext> context, RefPtr<Framebuffer> framebuffer, const mat4 &globalMatrix) {
-    if (!_source) return;
     if (!_visible) return;
-    if (!_enabled) return;
     if (_alpha < 0.0000001) return; // 内容过于接近全透明，直接忽略
     
-    _source->draw(context, framebuffer, globalMatrix, localMatrix(this), clipMatrix(this), size(), alpha());
+    vec4 bkgColor = this->backgroundColor();
+    mat4 localMatrix = this->localMatrix(this);
+    mat4 clipMatrix = this->clipMatrix(this);
+    vec2 size = this->size();
+    float alpha = this->alpha();
+
+    if (bkgColor.a > 0) {
+        context->draw(Renderer::RECT, framebuffer, globalMatrix, localMatrix, clipMatrix, Renderer::kColorConversionNone, size, alpha, bkgColor);
+    }
+    if (_source) {
+        _source->draw(context, framebuffer, globalMatrix, localMatrix, clipMatrix, size, alpha);
+    }
+    mat4 matrix = globalMatrix * localMatrix;
+    for (RefPtr<RenderLayer> layer : _sublayers) {
+        layer->render(context, framebuffer, matrix);
+    }
+}
+
+RefPtr<RenderLayer> RenderLayer::superlayer() const {
+    return _superlayer;
+}
+
+void RenderLayer::addLayer(RefPtr<RenderLayer> layer) {
+    if (layer->superlayer()) {
+        layer->removeFromSuperlayer();
+    }
+    _sublayers.push_back(layer);
+    layer->_superlayer = this;
+}
+
+void RenderLayer::removeFromSuperlayer() {
+    _superlayer->_sublayers.remove(this);
+    _superlayer = nullptr;
 }
 
 mat4 RenderLayer::localMatrix(RefPtr<RenderLayer> layer) {
@@ -147,12 +177,17 @@ mat4 RenderLayer::localMatrix(RefPtr<RenderLayer> layer) {
     vec2 scale          = layer->scale();
     mat4 transform      = layer->transform();
 
-    mat4 matrix = translate(identity<mat4>(), vec3(-offset - anchorPoint * size, 0)); // 移动锚点
-    matrix = mat4_cast(quat(rotate)) * matrix; // 欧拉角旋转
-    matrix = glm::scale(identity<mat4>(), vec3(scale, 1)) * matrix;
-    matrix = translate(identity<mat4>(), vec3(position + anchorPoint * size, 0)) * transform * matrix;
-
-    return matrix;
+    // 矩阵定位顺序：
+    // 1. 缩放
+    // 2. 点平移（移动锚点至原点）
+    // 3. 旋转
+    // 4. 对象平移
+    // 父矩阵在右，子矩阵在左。
+    mat4 matrix = glm::scale(identity<mat4>(), vec3(scale, 1));
+    matrix = translate(matrix, vec3(-offset - anchorPoint * size, 0));
+    matrix = mat4_cast(quat(rotate)) * matrix;
+    matrix = translate(identity<mat4>(), vec3(position, 0)) * matrix;
+    return transform * matrix;
 }
 
 mat4 RenderLayer::clipMatrix(RefPtr<RenderLayer> layer) {

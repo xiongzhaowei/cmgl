@@ -9,14 +9,6 @@
 
 OMP_RENDER_USING_NAMESPACE
 
-bool RenderObject::enabled() const {
-    return _enabled;
-}
-
-void RenderObject::setEnabled(bool enabled) {
-    _enabled = enabled;
-}
-
 vec2 RenderObject::size() const {
     return _size;
 }

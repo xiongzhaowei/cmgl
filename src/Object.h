@@ -46,4 +46,13 @@ public:
     virtual ~Object() = default;
 };
 
+class Interface : public virtual RefCounted, public virtual WeakSupported {
+    Interface(const Interface&) = delete;
+    Interface(const Interface&&) = delete;
+public:
+    Interface() = default;
+    virtual ~Interface() = default;
+    RefPtr<Object> asObject() const;
+};
+
 OMP_NAMESPACE_END

@@ -16,6 +16,9 @@ Thread::Thread() : _event(new WaitableEvent) {
 
 }
 
+Thread::~Thread() {
+}
+
 Thread* Thread::current() {
     return __thread;
 }
@@ -33,18 +36,21 @@ Thread* Thread::future() {
 }
 
 void Thread::start() {
-    assert(_thread == nullptr);
-
-    RefPtr<Thread> self = this;
-    _thread = std::make_unique<std::thread>([self]() {
-        __thread = self;
-        self->run();
-        __thread = nullptr;
-    });
+    if (_thread == nullptr) {
+        RefPtr<Thread> self = this;
+        _thread = std::make_unique<std::thread>([self]() {
+            __thread = self;
+            self->run();
+            __thread = nullptr;
+            self->_thread = nullptr;
+        });
+    }
 }
 
 void Thread::stop() {
-    runOnThread([this]() { _isRunning = false; });
+    if (_thread != nullptr) {
+        runOnThread([this]() { _isRunning = false; });
+    }
 }
 
 void Thread::run() {
@@ -90,7 +96,7 @@ void Thread::runOnThread(const std::function<void()>& callback) {
     _tasks.push_back(callback);
     _mutex.unlock();
     _event->signal();
-    if (!_isRunning) start();
+    if (_thread == nullptr) start();
 }
 
 RefPtr<Thread::ScheduledTask> Thread::schedule(double timeInterval, const std::function<bool()>& callback) {

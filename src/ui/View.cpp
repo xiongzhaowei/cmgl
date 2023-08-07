@@ -1,11 +1,8 @@
 #include "windows/defines.h"
+#include "windows/render/defines.h"
 #include <windowsx.h>
 
 OMP_UI_USING_NAMESPACE
-
-Layer* Layer::createLayer() {
-	return new OMP_UI_WINDOWS_NAMESPACE_PREFIX gdiplus::Layer;
-}
 
 Color View::backgroundColor() const {
 	return layer()->backgroundColor();
@@ -79,6 +76,14 @@ float View::rotate() const {
 
 void View::setRotate(float rotate) {
 	layer()->setRotate(rotate);
+}
+
+bool View::hidden() const {
+	return layer()->hidden();
+}
+
+void View::setHidden(bool hidden) {
+	layer()->setHidden(hidden);
 }
 
 void View::addSubview(View* view) {
@@ -226,12 +231,22 @@ RefPtr<Image> ImageView::image() const {
 }
 
 void ImageView::setImage(RefPtr<Image> image) {
-	_layer->setContent(image.value());
-	_layer->setContentSize(ui::Size(image->Width(), image->Height()));
-	ui::Rect rect = _layer->bounds();
-	_layer->setAnchorPoint(ui::Point(0, 0));
-	rect.size = ui::Size(image->Width(), image->Height());
-	_layer->setBounds(rect);
+	if (image) {
+		RefPtr<windows::Image> img = image.as<windows::Image>();
+		if (img) {
+			_layer->setContent(img->renderObject());
+		} else {
+			_layer->setContent(image);
+		}
+		_layer->setContentSize(ui::Size(image->width(), image->height()));
+		ui::Rect rect = _layer->bounds();
+		_layer->setAnchorPoint(ui::Point(0, 0));
+		rect.size = ui::Size(image->width(), image->height());
+		_layer->setBounds(rect);
+	} else {
+		_layer->setContent(nullptr);
+		_layer->setContentSize(ui::Size(0, 0));
+	}
 	_layer->setNeedsDisplay();
 }
 
@@ -296,7 +311,7 @@ void Button::layoutSubviews() {
 	if (image == nullptr) image = _stateImages[0];
 	if (image) {
 		_imageView->setImage(image);
-		_imageView->setScale(ui::Size(image->Width() / frame().size.width, image->Height() / frame().size.height));
+		_imageView->setScale(ui::Size(image->width() / frame().size.width, image->height() / frame().size.height));
 	}
 	if (Window* wnd = window()) wnd->setNeedsDisplay();
 }

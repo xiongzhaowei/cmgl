@@ -1,4 +1,6 @@
 target_sources(${PROJECT_NAME} PRIVATE
+    RECTRenderer.cpp
+    RECTRenderer.h
     RGBARenderer.cpp
     RGBARenderer.h
     YUV420PRenderer.cpp

@@ -49,25 +49,41 @@ void YUV420PVideoSource::clear(uint8_t red, uint8_t green, uint8_t blue) {
 void YUV420PVideoSource::update(const AVFrame *frame) {
     assert(frame != nullptr);
 
+#define ALIGN(num, align) ((((num) - 1) | ((align) - 1)) + 1)
     std::lock_guard<std::mutex> lock(_lock);
 
+    int32_t linesize = frame->linesize[0];
     int32_t width = frame->width;
     int32_t height = frame->height;
-    int32_t size = width * height;
+    int32_t stride = ALIGN(width, 4);
+    int32_t size = stride * height;
+    _size = ivec2(width, height);
 
     _pixels1.resize(size);
-    memcpy(_pixels1.data(), frame->data[0], size);
+    for (int32_t y = 0; y < height; y++) {
+        memcpy(_pixels1.data() + stride * y, frame->data[0] + linesize * y, width);
+    }
 
-    size = (((size - 1) | 3) + 1) >> 2; // 4 bytes align and divide 4.
+    linesize = frame->linesize[1];
+    width = ALIGN(width, 2) >> 1;
+    height = ALIGN(height, 2) >> 1;
+    stride = ALIGN(stride >> 1, 4);
+    size = stride * height;
 
     _pixels2.resize(size);
-    memcpy(_pixels2.data(), frame->data[1], size);
+    for (int32_t y = 0; y < height; y++) {
+        memcpy(_pixels2.data() + stride * y, frame->data[1] + linesize * y, width);
+    }
+
+    linesize = frame->linesize[2];
 
     _pixels3.resize(size);
-    memcpy(_pixels3.data(), frame->data[2], size);
+    for (int32_t y = 0; y < height; y++) {
+        memcpy(_pixels3.data() + stride * y, frame->data[2] + linesize * y, width);
+    }
 
-    _size = ivec2(width, height);
     _isNeedsUpdate = true;
+#undef ALIGN
 }
 
 bool YUV420PVideoSource::support(const Type &type) {
@@ -93,5 +109,5 @@ void YUV420PVideoSource::draw(
         _isNeedsUpdate = false;
     }
 
-    context->draw(Renderer::YUV420P, framebuffer, globalMatrix, localMatrix, clipMatrix, Renderer::kColorConversionBT601FullRange, size, alpha, _texture1->data(), _texture2->data(), _texture3->data());
+    context->draw(Renderer::YUV420P, framebuffer, globalMatrix, localMatrix, clipMatrix, Renderer::kColorConversionBT709, size, alpha, _texture1->data(), _texture2->data(), _texture3->data());
 }

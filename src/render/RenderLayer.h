@@ -8,8 +8,9 @@ OMP_RENDER_NAMESPACE_BEGIN
 
 /// RenderLayer主要负责内容布局，负责将DataSource提供的内容绘制到指定区域。
 struct RenderLayer : public RenderSource {
-    virtual bool enabled() const;
-    virtual void setEnabled(bool enabled);
+    /// 背景色，取值范围0-1。
+    virtual vec4 backgroundColor() const override;
+    virtual void setBackgroundColor(vec4 color);
 
     /// 锚点位置，取值范围0-1，决定旋转的圆心，但不会改变原点的位置。
     virtual vec2 anchorPoint() const;
@@ -66,9 +67,14 @@ struct RenderLayer : public RenderSource {
     /// 当前layer需要渲染时触发，执行绘制操作。
     virtual void render(RefPtr<RenderContext> context, RefPtr<Framebuffer> framebuffer, const mat4 &globalMatrix) override;
 
+    virtual RefPtr<RenderLayer> superlayer() const;
+    virtual void addLayer(RefPtr<RenderLayer> layer);
+    virtual void removeFromSuperlayer();
+
     static mat4 localMatrix(RefPtr<RenderLayer> layer);
     static mat4 clipMatrix(RefPtr<RenderLayer> layer);
 protected:
+    vec4 _backgroundColor = vec4(0, 0, 0, 0);
     vec2 _anchorPoint   = vec2(0, 0);
     vec2 _position      = vec2(0, 0);
     vec2 _offset        = vec2(0, 0);
@@ -79,9 +85,9 @@ protected:
     float _alpha        = 1;
     bool _maskToBounds  = true;
     bool _visible       = true;
-    bool _enabled       = true;
     RefPtr<DataSource> _source;
-    std::vector<RefPtr<RenderLayer>> _sublayers;
+    WeakPtr<RenderLayer> _superlayer;
+    std::list<RefPtr<RenderLayer>> _sublayers;
 };
 
 OMP_RENDER_NAMESPACE_END

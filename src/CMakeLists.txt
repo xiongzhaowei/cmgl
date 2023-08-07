@@ -3,7 +3,6 @@ add_library(${PROJECT_NAME} STATIC)
 
 add_subdirectory("ffmpeg")
 add_subdirectory("render")
-add_subdirectory("thread")
 add_subdirectory("ui")
 target_sources(${PROJECT_NAME} PRIVATE
     CMGL.h

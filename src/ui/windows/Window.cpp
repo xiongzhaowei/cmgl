@@ -89,7 +89,7 @@ PlatformWindow::PlatformWindow(RefPtr<Style> style, WindowController* windowCont
 
 bool PlatformWindow::create(int32_t width, int32_t height, Window* parent, bool isGLESEnabled) {
 	_layer->setAnchorPoint(Point{ 0, 0 });
-	_layer->setBackgroundColor(Color(0xFFFFFFFF));
+	_layer->setBackgroundColor(0);
 	if (isGLESEnabled) _eglWindow = new EGLWindowImpl(this);
 	HWND hWnd = CreateWindowEx(
 		_style->exStyle(),
@@ -147,6 +147,9 @@ void PlatformWindow::setTitle(const std::wstring& title) {
 }
 
 RefPtr<render::RenderSource> PlatformWindow::renderLayer() {
+	RefPtr<EGLLayer> eglLayer = _layer.as<EGLLayer>();
+	if (eglLayer) return eglLayer->layer();
+
 	if (_renderLayer == nullptr) _renderLayer = new render::RGBAVideoSource;
 	return _renderLayer;
 }
@@ -160,6 +163,10 @@ void PlatformWindow::layoutSubviews() {
 }
 
 std::optional<LRESULT> PlatformWindow::handleMouseEvent(const MouseEvent& event) {
+	if (_windowController) {
+		std::optional<LRESULT> result = _windowController->handleMouseEvent(event);
+		if (result != std::nullopt) return result.value();
+	}
 	if (event.native.message == WM_MOUSEMOVE && !_isMouseTracking) {
 		TRACKMOUSEEVENT tme = { 0 };
 		tme.cbSize = sizeof(TRACKMOUSEEVENT);
@@ -193,33 +200,33 @@ std::optional<LRESULT> PlatformWindow::handleMouseEvent(const MouseEvent& event)
 	case WM_MOUSEWHEEL:
 		view->onMouseWheel(event);
 		break;
-	case WM_NCLBUTTONDOWN:
+	//case WM_NCLBUTTONDOWN:
 	case WM_LBUTTONDOWN:
-	case WM_NCRBUTTONDOWN:
+	//case WM_NCRBUTTONDOWN:
 	case WM_RBUTTONDOWN:
-	case WM_NCMBUTTONDOWN:
+	//case WM_NCMBUTTONDOWN:
 	case WM_MBUTTONDOWN:
-	case WM_NCXBUTTONDOWN:
+	//case WM_NCXBUTTONDOWN:
 	case WM_XBUTTONDOWN:
 		view->onMouseDown(event);
 		break;
-	case WM_NCLBUTTONUP:
+	//case WM_NCLBUTTONUP:
 	case WM_LBUTTONUP:
-	case WM_NCRBUTTONUP:
+	//case WM_NCRBUTTONUP:
 	case WM_RBUTTONUP:
-	case WM_NCMBUTTONUP:
+	//case WM_NCMBUTTONUP:
 	case WM_MBUTTONUP:
-	case WM_NCXBUTTONUP:
+	//case WM_NCXBUTTONUP:
 	case WM_XBUTTONUP:
 		view->onMouseUp(event);
 		break;
-	case WM_NCLBUTTONDBLCLK:
+	//case WM_NCLBUTTONDBLCLK:
 	case WM_LBUTTONDBLCLK:
-	case WM_NCRBUTTONDBLCLK:
+	//case WM_NCRBUTTONDBLCLK:
 	case WM_RBUTTONDBLCLK:
-	case WM_NCMBUTTONDBLCLK:
+	//case WM_NCMBUTTONDBLCLK:
 	case WM_MBUTTONDBLCLK:
-	case WM_NCXBUTTONDBLCLK:
+	//case WM_NCXBUTTONDBLCLK:
 	case WM_XBUTTONDBLCLK:
 		view->onDoubleClick(event);
 		break;
@@ -323,10 +330,15 @@ std::optional<LRESULT> PlatformWindow::onNcHitTest(const MSG& event) {
 	ScreenToClient((HWND)handle(), &pt);
 
 	Size scale = this->scale();
-	NCHitTestView* view = dynamic_cast<NCHitTestView*>(hitTest(pt.x / scale.width, pt.y / scale.height));
-	if (view == nullptr) return HTCLIENT;
+	RefPtr<View> view1 = hitTest(pt.x / scale.width, pt.y / scale.height);
+	RefPtr<NCHitTestView> view2 = view1.as<NCHitTestView>();
+	while (view2 == nullptr && view1->superview() != nullptr) {
+		view1 = view1->superview();
+		view2 = view1.as<NCHitTestView>();
+	}
+	if (view2 == nullptr) return HTCLIENT;
 
-	LRESULT code = view->code();
+	LRESULT code = view2->code();
 	switch (code) {
 	case HTLEFT:
 	case HTRIGHT:
@@ -394,7 +406,12 @@ std::optional<LRESULT> PlatformWindow::onPaint(const MSG& event) {
 	if (_eglContext) {
 		BeginPaint(_hWnd, &ps);
 		EndPaint(_hWnd, &ps);
-		if (_layer && _renderLayer) _layer.cast<gdiplus::Layer>()->paint(_renderLayer);
+		if (_layer && _renderLayer) {
+			RefPtr<gdiplus::Layer> gdiLayer = _layer.as<gdiplus::Layer>();
+			if (gdiLayer != nullptr) {
+				gdiLayer->paint(_renderLayer);
+			}
+		}
 
 		_eglContext->render();
 	} else {

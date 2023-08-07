@@ -51,6 +51,8 @@ RefPtr<Renderer> Renderer::createRenderer(Name name) {
     switch (name) {
     case None:
         return nullptr;
+    case RECT:
+        return new gles2::RECTRenderer;
     case RGBA:
         return new gles2::RGBARenderer;
     case YUV420P:

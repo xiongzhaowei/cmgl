@@ -24,7 +24,7 @@ public:
     void copyData(uint8_t** data, int32_t offset, int32_t count, int32_t nb_channels);
     void copy(uint8_t** data, int32_t offset, int32_t count, int32_t nb_channels);
     void add(RefPtr<Frame> frame) override;
-    void addError() override;
+    void addError(RefPtr<Error> error) override;
     void close() override;
     bool available() const override;
 };

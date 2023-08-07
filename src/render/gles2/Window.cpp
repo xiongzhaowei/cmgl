@@ -9,6 +9,14 @@
 
 OMP_RENDER_GLES2_USING_NAMESPACE
 
+vec3 Window::backgroundColor() const {
+    return _backgroundColor;
+}
+
+void Window::setBackgroundColor(vec3 color) {
+    _backgroundColor = color;
+}
+
 void Window::render(RefPtr<RenderContext> context, RefPtr<RenderSource> source) {
     if (source) source->render(context, _framebuffer, _projectionMatrix);
 }
@@ -19,7 +27,7 @@ void Window::startRender(RefPtr<RenderContext> context) {
     vec2 size = this->size();
     _projectionMatrix = glm::ortho(0.0f, size.x, size.y, 0.0f);
     GL_ERROR(glViewport(0, 0, size.x, size.y));
-    GL_ERROR(glClearColor(0.3f, 0.3f, 0.3f, 1));
+    GL_ERROR(glClearColor(_backgroundColor.r, _backgroundColor.g, _backgroundColor.b, 1));
     GL_ERROR(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
     
     // 开启预乘模式alpha混合，需要在片元着色器中输出预乘后的颜色

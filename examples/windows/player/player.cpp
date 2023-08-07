@@ -286,7 +286,6 @@ void PlayerWindowController::open(const std::string& path) {
 	});
 	_timeLabel->setText(timeLabel((int32_t)_player->time()));
 	_durationLabel->setText(timeLabel((int32_t)_player->duration()));
-	_videoSource->setEnabled(true);
 	_progress->setMaxValue((int64_t)_player->duration());
 	_player->setVolume(_slient ? 0 : _volume);
 	window()->setNeedsLayout();

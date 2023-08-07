@@ -109,7 +109,7 @@ class WinHTTPVirtualFileBlock : public StreamConsumer<std::initializer_list<uint
     std::optional<int64_t> _size = std::nullopt;
 public:
     WinHTTPVirtualFileBlock(RefPtr<WinHTTPResponse> response, RefPtr<MovieFile> cache, std::int64_t offset) : _response(response), _cache(cache), _offset(offset) {}
-    void add(std::initializer_list<uint8_t> bytes) {
+    void add(std::initializer_list<uint8_t> bytes) override {
         _cache->seek(_offset + _received, SEEK_SET);
         _cache->write(bytes.begin(), (DWORD)bytes.size());
         _received += bytes.size();
@@ -117,17 +117,22 @@ public:
             close();
         }
     }
-    void addError() {
+    void addError(RefPtr<Error> error) override {
         close();
     }
-    void close() {
+    void close() override {
         if (_response) {
             _response->close();
             _response = nullptr;
         }
     }
-    bool available() const {
+    bool available() const override {
         return true;
+    }
+    bool flush() {
+        return true;
+    }
+    void clear() {
     }
     bool contains(int64_t offset) const {
         if (_offset < offset) return false;
@@ -182,4 +187,9 @@ public:
             self->_blocks.push_back(block);
         });
     }
+};
+
+class WinHTTPError : public Error {
+public:
+    WinHTTPError(DWORD error, const char* method, int line);
 };

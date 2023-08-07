@@ -1,26 +1,25 @@
 ﻿//
-//  YUV420SPRenderer.cpp
+//  RECTRenderer.cpp
 //  omrender
 //
-//  Created by 熊朝伟 on 2020/4/21.
+//  Created by 熊朝伟 on 2023/8/2.
 //
 
 #include "../defines.h"
 
 OMP_RENDER_GLES2_USING_NAMESPACE
 
-void YUV420SPRenderer::load(RefPtr<RenderContext> context) {
+void RECTRenderer::load(RefPtr<RenderContext> context) {
     _program = new Program;
     _program->setVertexShader(
         #include "../shaders/RGBA.vs"
     );
     _program->setFragmentShader(
-        #include "../shaders/YUV420SP.fs"
+        #include "../shaders/RECT.fs"
     );
     _program->link();
     _positionLocation = _program->attribLocation("position");
-    _texture1Location = _program->uniformLocation("texture1");
-    _texture2Location = _program->uniformLocation("texture2");
+    _colorLocation = _program->uniformLocation("color");
     _globalMatrixLocation = _program->uniformLocation("globalMatrix");
     _localMatrixLocation = _program->uniformLocation("localMatrix");
     _clipMatrixLocation = _program->uniformLocation("clipMatrix");
@@ -32,10 +31,9 @@ void YUV420SPRenderer::load(RefPtr<RenderContext> context) {
     GL_ERROR(glEnableVertexAttribArray(_positionLocation));
 }
 
-void YUV420SPRenderer::unload(RefPtr<RenderContext> context) {
+void RECTRenderer::unload(RefPtr<RenderContext> context) {
     _positionLocation = 0;
-    _texture1Location = 0;
-    _texture2Location = 0;
+    _colorLocation = 0;
     _globalMatrixLocation = 0;
     _localMatrixLocation = 0;
     _clipMatrixLocation = 0;
@@ -45,7 +43,7 @@ void YUV420SPRenderer::unload(RefPtr<RenderContext> context) {
     _program = nullptr;
 }
 
-void YUV420SPRenderer::draw(
+void RECTRenderer::draw(
     RefPtr<RenderContext> context,
     RefPtr<Framebuffer> framebuffer,
     const mat4 &globalMatrix,
@@ -67,8 +65,7 @@ void YUV420SPRenderer::draw(
             0, 1, 2, 1, 2, 3
     };
     _program->use();
-    _program->setUniformTexture(_texture1Location, 1, va_arg(list, GLuint));
-    _program->setUniformTexture(_texture2Location, 2, va_arg(list, GLuint));
+    _program->setUniform(_colorLocation, va_arg(list, vec4));
     _program->setUniform(_globalMatrixLocation, globalMatrix);
     _program->setUniform(_localMatrixLocation, localMatrix);
     _program->setUniform(_clipMatrixLocation, clipMatrix);

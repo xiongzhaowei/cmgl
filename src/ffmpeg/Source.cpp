@@ -9,7 +9,7 @@ OMP_FFMPEG_USING_NAMESPACE
 MovieSource::MovieSource() : _packet(new Packet), _controller(StreamController<Packet>::sync()) {
 }
 
-MovieSource::MovieSource(std::function<bool(bool)> available) : _available(available), _packet(new Packet), _controller(StreamController<Packet>::sync()) {
+MovieSource::MovieSource(const std::function<bool(bool)>& available) : _available(available), _packet(new Packet), _controller(StreamController<Packet>::sync()) {
 }
 
 bool MovieSource::open(RefPtr<MovieFile> file) {
@@ -76,15 +76,17 @@ bool MovieSource::available() const {
 bool MovieSource::read() {
 	if (_context == nullptr) return false;
 
+	std::unique_lock<std::mutex> lock(_mutex);
 	int result = av_read_frame(_context, _packet->packet());
 	if (AVERROR_EOF == result) {
+		_controller->addError(new AVError(result, __FUNCSIG__, __LINE__));
 		close();
 		return false;
 	}
 
 	if (Error::verify(result, __FUNCSIG__, __LINE__)) {
 		_controller->add(_packet);
-		_packet->reset();
+		_packet = new Packet;
 		return true;
 	}
 	return false;
@@ -97,6 +99,9 @@ bool MovieSource::seek(double time) {
 	bool result = Error::verify(avformat_seek_file(_context, -1, 0, ts, _context->duration, 0), __FUNCSIG__, __LINE__);
 	if (_context->pb) avio_flush(_context->pb);
 	avformat_flush(_context);
+	if (result) {
+		_controller->clear();
+	}
 	return result;
 }
 
@@ -107,6 +112,10 @@ void MovieSource::skip(const std::function<bool(AVPacket*)>& skipWhere) {
 		_packet->reset();
 		if (result) break;
 	}
+}
+
+void MovieSource::flush() {
+	_controller->flush();
 }
 
 RefPtr<StreamSubscription> MovieSource::listen(RefPtr<StreamConsumer<Packet>> consumer) {
@@ -136,14 +145,30 @@ void MovieDecoder::add(RefPtr<Packet> packet) {
 					}
 					break;
 				}
-				_output->add(_frame);
+				RefPtr<Frame> frame;
+				if (_stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && _frame->frame()->hw_frames_ctx != nullptr) {
+					frame = Frame::alloc();
+					if (Error::verify(av_hwframe_transfer_data(frame->frame(), _frame->frame(), 0), __FUNCSIG__, __LINE__)) {
+						frame->frame()->best_effort_timestamp = _frame->frame()->best_effort_timestamp;
+						frame->frame()->pts = _frame->frame()->pts;
+						frame->frame()->pkt_dts = _frame->frame()->pkt_dts;
+						frame->frame()->pkt_pos = _frame->frame()->pkt_pos;
+						frame->frame()->pkt_duration = _frame->frame()->pkt_pos;
+					} else {
+						assert(false);
+						frame = nullptr;
+					}
+				} else {
+					frame = _frame;
+				}
+				if (frame) _output->add(frame);
 			}
 		}
 	}
 }
 
-void MovieDecoder::addError() {
-	_output->addError();
+void MovieDecoder::addError(RefPtr<Error> error) {
+	_output->addError(error);
 }
 
 void MovieDecoder::close() {
@@ -152,6 +177,14 @@ void MovieDecoder::close() {
 
 bool MovieDecoder::available() const {
 	return _output->available();
+}
+
+bool MovieDecoder::flush() {
+	return _output->flush();
+}
+
+void MovieDecoder::clear() {
+	return _output->clear();
 }
 
 AVStream* MovieDecoder::stream() const {
@@ -166,8 +199,49 @@ RefPtr<MovieDecoder> MovieDecoder::from(RefPtr<StreamConsumer<Frame>> output, AV
 	const AVCodec* codec = avcodec_find_decoder(stream->codecpar->codec_id);
 	if (!codec) return nullptr;
 
+	AVPixelFormat format = AV_PIX_FMT_NONE;
+	const AVCodecHWConfig* config = nullptr;
+#if 1
+	if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+		int32_t i = 0;
+		do {
+			config = avcodec_get_hw_config(codec, i++);
+			if (config && config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
+				format = config->pix_fmt;
+				break;
+			}
+		} while (config);
+	}
+#endif
+
 	AVCodecContext* context = avcodec_alloc_context3(codec);
 	avcodec_parameters_to_context(context, stream->codecpar);
+
+#if 1
+	if (format != AV_PIX_FMT_NONE && config != nullptr) {
+		context->get_format = [](struct AVCodecContext* context, const AVPixelFormat* fmt) -> AVPixelFormat {
+			AVPixelFormat format = AV_PIX_FMT_NONE;
+			const AVCodecHWConfig* config = nullptr;
+			int32_t i = 0;
+			do {
+				config = avcodec_get_hw_config(context->codec, i++);
+				if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) {
+					format = config->pix_fmt;
+					break;
+				}
+			} while (config);
+
+			for (const AVPixelFormat* f = fmt; *f != AV_PIX_FMT_NONE; f++) {
+				if (*f == format) return *f;
+			}
+
+			return AV_PIX_FMT_NONE;
+		};
+
+		Error::verify(av_hwdevice_ctx_create(&context->hw_device_ctx, config->device_type, nullptr, nullptr, 0), __FUNCSIG__, __LINE__);
+	}
+#endif
+
 	if (avcodec_open2(context, codec, &options) < 0) return nullptr;
 
 	return new MovieDecoder(output, stream, context);
@@ -212,13 +286,15 @@ RefPtr<Stream<Frame>> MovieSourceStream::convert(AVSampleFormat sample_fmt) {
 
 RefPtr<Stream<Frame>> MovieSourceStream::convert(AVPixelFormat format) {
 	assert(stream()->codecpar->codec_type == AVMEDIA_TYPE_VIDEO);
-	if (stream()->codecpar->format == format) return this;
 	return Stream<Frame>::convert(VideoConverter::create(stream()->codecpar, format));
 }
 
-RefPtr<MovieSourceStream> MovieSourceStream::from(RefPtr<MovieSource> source, AVStream* stream, AVDictionary* options) {
+RefPtr<MovieSourceStream> MovieSourceStream::from(RefPtr<Stream<Packet>> source, AVStream* stream, AVDictionary* options) {
+	if (stream == nullptr) return nullptr;
+	if (stream->codecpar == nullptr) return nullptr;
+
 	const AVCodec* codec = avcodec_find_decoder(stream->codecpar->codec_id);
-	if (!codec) return nullptr;
+	if (codec == nullptr) return nullptr;
 
 	AVCodecContext* context = avcodec_alloc_context3(codec);
 	avcodec_parameters_to_context(context, stream->codecpar);
@@ -242,7 +318,52 @@ RefPtr<MovieSourceStream> MovieSourceStream::video(RefPtr<MovieSource> source, A
 	return from(source, stream, options);
 }
 
-MovieBufferedConsumer::MovieBufferedConsumer(RefPtr<Stream<Frame>> stream, uint32_t maxCount) : _subscription(stream->listen(this)), _maxCount(maxCount) {
+MovieCachedPacketConsumer::MovieCachedPacketConsumer(RefPtr<StreamConsumer<Packet>> output, const std::function<bool(size_t)>& available, int32_t index) : _output(output), _available(available), _index(index) {}
+
+void MovieCachedPacketConsumer::add(RefPtr<Packet> packet) {
+	if (packet && packet->packet()->stream_index == _index) {
+		_list.push_back(packet);
+	}
+	flush();
+}
+
+void MovieCachedPacketConsumer::addError(RefPtr<Error> error) {
+	_output->addError(error);
+}
+
+void MovieCachedPacketConsumer::close() {
+	_output->close();
+}
+
+bool MovieCachedPacketConsumer::available() const {
+	return _available ? _available(_list.size()) : true;
+}
+
+bool MovieCachedPacketConsumer::empty() {
+	return _list.empty();
+}
+
+bool MovieCachedPacketConsumer::flush() {
+	if (_output == nullptr) return false;
+	if (!_output->available()) {
+		return _output->flush() || !_list.empty();
+	}
+
+	while (_output->available() && !_list.empty()) {
+		if (!_list.empty()) {
+			RefPtr<Packet> packet = _list.front();
+			_list.pop_front();
+			if (packet) _output->add(packet);
+		}
+	}
+	return !_list.empty();
+}
+
+void MovieCachedPacketConsumer::clear() {
+	_list.clear();
+}
+
+MovieBufferedConsumer::MovieBufferedConsumer(RefPtr<Stream<Frame>> stream, uint32_t maxCount) : _subscription(stream->listen(this)), _maxCount(maxCount), _isEndOfFile(false) {
 }
 
 void MovieBufferedConsumer::add(RefPtr<Frame> frame) {
@@ -258,8 +379,10 @@ void MovieBufferedConsumer::add(RefPtr<Frame> frame) {
     push(output);
 }
 
-void MovieBufferedConsumer::addError() {
-
+void MovieBufferedConsumer::addError(RefPtr<Error> error) {
+	if (error && error->code == AVERROR_EOF) {
+		_isEndOfFile = true;
+	}
 }
 
 void MovieBufferedConsumer::close() {
@@ -271,6 +394,14 @@ void MovieBufferedConsumer::close() {
 
 bool MovieBufferedConsumer::available() const {
 	return size() < _maxCount;
+}
+
+bool MovieBufferedConsumer::flush() {
+	return size() != 0;
+}
+
+bool MovieBufferedConsumer::eof() const {
+	return _isEndOfFile;
 }
 
 size_t MovieBufferedConsumer::size() const {
@@ -332,8 +463,8 @@ void MovieEncoder::add(RefPtr<Frame> frame) {
 	if (frame == nullptr) return;
 	if (frame->frame() == nullptr) return;
 
-	if (!Error::verify(avcodec_send_frame(_context, frame->frame()), __FUNCSIG__, __LINE__)) {
-		addError();
+	if (RefPtr<Error> error = AVError::from(avcodec_send_frame(_context, frame->frame()), __FUNCSIG__, __LINE__)) {
+		addError(error);
 		return;
 	}
 
@@ -343,7 +474,7 @@ void MovieEncoder::add(RefPtr<Frame> frame) {
 			if (error != AVERROR(EAGAIN) && error != AVERROR_EOF) {
 				Error::report(error, __FUNCSIG__, __LINE__);
 			}
-			addError();
+			addError(new AVError(error, __FUNCSIG__, __LINE__));
 			break;
 		}
 		av_packet_rescale_ts(_packet->packet(), context()->time_base, _stream->time_base);
@@ -353,8 +484,8 @@ void MovieEncoder::add(RefPtr<Frame> frame) {
 	}
 }
 
-void MovieEncoder::addError() {
-	_output->addError();
+void MovieEncoder::addError(RefPtr<Error> error) {
+	_output->addError(error);
 }
 
 void MovieEncoder::close() {
@@ -363,6 +494,14 @@ void MovieEncoder::close() {
 
 bool MovieEncoder::available() const {
 	return _output->available();
+}
+
+bool MovieEncoder::flush() {
+	return _output->flush();
+}
+
+void MovieEncoder::clear() {
+	return _output->clear();
 }
 
 AVStream* MovieEncoder::stream() const {
@@ -477,7 +616,7 @@ void MovieTarget::add(RefPtr<Packet> packet) {
 	assert(result);
 }
 
-void MovieTarget::addError() {
+void MovieTarget::addError(RefPtr<Error> error) {
 
 }
 
@@ -487,6 +626,13 @@ void MovieTarget::close() {
 
 bool MovieTarget::available() const {
 	return true;
+}
+
+bool MovieTarget::flush() {
+	return true;
+}
+
+void MovieTarget::clear() {
 }
 
 AVFormatContext* MovieTarget::context() const {

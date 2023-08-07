@@ -20,6 +20,7 @@ public:
     class TaskList;
 
     Thread();
+    ~Thread();
 
     virtual void start();
     virtual void stop();

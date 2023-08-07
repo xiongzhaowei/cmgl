@@ -12,9 +12,11 @@ public:
     typedef typename std::conditional<std::is_base_of<RefCounted, T>::value, RefPtr<T>, T>::type Element;
 
     virtual void add(Element object) = 0;
-    virtual void addError() = 0;
+    virtual void addError(RefPtr<Error> error) = 0;
     virtual void close() = 0;
     virtual bool available() const = 0;
+    virtual bool flush() = 0;
+    virtual void clear() = 0;
 };
 
 class StreamSubscription : public Object {
@@ -75,12 +77,12 @@ public:
             consumer->add(object);
         }
     }
-    void addError() override {
+    void addError(RefPtr<Error> error) override {
         _mutex.lock();
         std::list<RefPtr<StreamConsumer<T>>> consumers = _consumers;
         _mutex.unlock();
         for (RefPtr<StreamConsumer<T>> consumer : consumers) {
-            consumer->addError();
+            consumer->addError(error);
         }
     }
     void close() override {
@@ -101,6 +103,27 @@ public:
             if (!consumer->available()) return false;
         }
         return true;
+    }
+    bool flush() override {
+        _mutex.lock();
+        std::list<RefPtr<StreamConsumer<T>>> consumers = _consumers;
+        _mutex.unlock();
+
+        if (consumers.empty()) return false;
+        bool result = false;
+        for (RefPtr<StreamConsumer<T>> consumer : consumers) {
+            result = consumer->flush() || result;
+        }
+        return result;
+    }
+    void clear() override {
+        _mutex.lock();
+        std::list<RefPtr<StreamConsumer<T>>> consumers = _consumers;
+        _mutex.unlock();
+
+        for (RefPtr<StreamConsumer<T>> consumer : consumers) {
+            consumer->clear();
+        }
     }
     bool available(bool initial, const std::function<bool(bool, bool)>& every) const override {
         _mutex.lock();
@@ -134,6 +157,7 @@ public:
             RefPtr<StreamConsumer<T>> _consumer;
         public:
             _StreamSubscription(RefPtr<_SyncStreamController<T>> controller, RefPtr<StreamConsumer<T>> consumer) : _controller(controller), _consumer(consumer) {}
+            //~_StreamSubscription() { cancel(); }
             void cancel() {
                 if (_controller) {
                     _controller->cancel(_consumer);
@@ -196,9 +220,11 @@ RefPtr<Stream<typename Converter::Target>> Stream<T>::convert(RefPtr<Converter> 
             if (_subscription != nullptr) { _subscription->cancel(); _subscription = nullptr; }
         }
         void add(StreamConsumer<T>::Element object) override { _controller->add(_converter->convert(object)); }
-        void addError() override { _controller->addError(); }
+        void addError(RefPtr<Error> error) override { _controller->addError(error); }
         void close() override { _controller->close(); }
         bool available() const override { return _controller->available(); }
+        bool flush() override { return _controller->flush(); }
+        void clear() override { return _controller->clear(); }
         RefPtr<StreamSubscription> listen(RefPtr<StreamConsumer<typename Converter::Target>> consumer) override {
             return _controller->stream()->listen(consumer);
         }
@@ -232,7 +258,7 @@ RefPtr<Stream<typename std::enable_if<
 Stream<T>::transform(Args... args) {
     return transform(
         std::function<RefPtr<StreamConsumer<T>>(RefPtr<StreamConsumer<typename Transformer::Target>>)>(
-            [args...](RefPtr<StreamConsumer<Frame>> consumer) { return new Transformer(consumer, args...); }
+            [args...](RefPtr<StreamConsumer<T>> consumer) { return new Transformer(consumer, args...); }
         )
     );
 }
@@ -243,7 +269,7 @@ RefPtr<Stream<typename std::enable_if<std::is_base_of<StreamConsumer<T>, Transfo
 Stream<T>::transform(RefPtr<Transformer>(*creater)(RefPtr<StreamConsumer<typename Transformer::Target>>, Args...), Args... args) {
     return transform(
         std::function<RefPtr<StreamConsumer<T>>(RefPtr<StreamConsumer<typename Transformer::Target>>)>(
-            [creater, args...](RefPtr<StreamConsumer<Frame>> consumer) { return creater(consumer, args...); }
+            [creater, args...](RefPtr<StreamConsumer<T>> consumer) { return creater(consumer, args...); }
         )
     );
 }

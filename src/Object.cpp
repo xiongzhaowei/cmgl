@@ -44,3 +44,7 @@ WeakSupported::~WeakSupported() {
 WeakOwner* WeakSupported::weak() const {
     return _weak;
 }
+
+RefPtr<Object> Interface::asObject() const {
+    return dynamic_cast<Object*>(const_cast<Interface*>(this));
+}

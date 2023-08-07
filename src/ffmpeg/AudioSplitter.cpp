@@ -65,8 +65,8 @@ void AudioSplitter::add(RefPtr<Frame> frame) {
     copyData(frame->frame()->extended_data, 0, frame->frame()->nb_samples, frame->frame()->ch_layout.nb_channels);
 }
 
-void AudioSplitter::addError() {
-    _output->addError();
+void AudioSplitter::addError(RefPtr<Error> error) {
+    _output->addError(error);
 }
 
 void AudioSplitter::close() {

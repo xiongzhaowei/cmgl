@@ -14,6 +14,8 @@ public:
     void wait(const std::function<bool()>& pred);
     bool wait(const std::function<bool()>& pred, double timeout);
     bool wait(const std::function<bool()>& pred, std::chrono::steady_clock::time_point timeout);
+
+    static bool wait(const std::function<void(RefPtr<WaitableEvent> event)>& callback, double timeout);
 };
 
 OMP_NAMESPACE_END

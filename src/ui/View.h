@@ -6,56 +6,6 @@ public:
 	virtual Responder* next() const = 0;
 };
 
-class Layer : public Object {
-public:
-	virtual Color backgroundColor() const = 0;
-	virtual void setBackgroundColor(Color color) = 0;
-
-	virtual Rect frame() const = 0;
-	virtual void setFrame(Rect frame) = 0;
-
-	virtual Rect bounds() const = 0;
-	virtual void setBounds(Rect bounds) = 0;
-
-	virtual Point anchorPoint() const = 0;
-	virtual void setAnchorPoint(Point anchor) = 0;
-
-	virtual Point position() const = 0;
-	virtual void setPosition(Point position) = 0;
-
-	virtual Size scale() const = 0;
-	virtual void setScale(Size scale) = 0;
-
-	virtual Point contentOffset() const = 0;
-	virtual void setContentOffset(Point offset) = 0;
-
-	virtual Size contentSize() const = 0;
-	virtual void setContentSize(Size size) = 0;
-
-	virtual float rotate() const = 0;
-	virtual void setRotate(float rotate) = 0;
-
-	virtual float cornerRadius() const = 0;
-	virtual void setCornerRadius(float radius) = 0;
-
-	virtual float shadowOpacity() const = 0;
-	virtual void setShadowOpacity(float opacity) = 0;
-
-	virtual float shadowRadius() const = 0;
-	virtual void setShadowRadius(float radius) = 0;
-
-	virtual void* content() const = 0;
-	virtual void setContent(void* image) = 0;
-
-	virtual void setNeedsDisplay() = 0;
-
-	virtual void addLayer(Layer* layer) = 0;
-	virtual void removeFromSuperlayer() = 0;
-
-	virtual void drawText(const std::wstring& text, float fontSize, Color color, TextAlignment textAlignment, TextVerticalAlignment textVerticalAlignment) = 0;
-	static Layer* createLayer();
-};
-
 class Window;
 
 class View : public Responder {
@@ -89,7 +39,7 @@ public:
 
 		for (auto it = _subviews.rbegin(); it != _subviews.rend(); it++) {
 			View* view = *it;
-			if (view->isMouseEnabled()) {
+			if (view->isMouseEnabled() && !view->hidden()) {
 				View* subview = view->hitTest(x, y);
 				if (subview) return subview;
 			}
@@ -135,6 +85,9 @@ public:
 
 	virtual float rotate() const;
 	virtual void setRotate(float rotate);
+
+	virtual bool hidden() const;
+	virtual void setHidden(bool hidden);
 
 	virtual void addSubview(View* view);
 	virtual void removeFromSuperview();

@@ -7,7 +7,7 @@
 OMP_FFMPEG_NAMESPACE_BEGIN
 
 class MoviePlayer : public Object {
-    const uint32_t _maxCacheFrames = 8;
+    const uint32_t _maxCacheFrames = 3;
     RefPtr<MovieThread> _thread;
     RefPtr<MovieSource> _source;
     RefPtr<MovieSourceStream> _audioSource;
@@ -17,10 +17,15 @@ class MoviePlayer : public Object {
     RefPtr<MoviePlayer> _self;
     bool _isPlaying = false;
 public:
+    static bool supported(const std::string& path);
     static RefPtr<MoviePlayer> file(const std::string& path, RefPtr<MovieThread> thread = nullptr);
+
+    ~MoviePlayer();
 
     bool open(RefPtr<MovieFile> file, RefPtr<MovieThread> thread = nullptr);
     bool open(const std::string& path, RefPtr<MovieThread> thread = nullptr);
+    void asyncOpen(const std::string& path, const std::function<void(bool)>& callback);
+    void asyncOpen(const std::string& path, RefPtr<MovieThread> thread, const std::function<void(bool)>& callback);
     void close();
 
     bool ready() const;
@@ -47,8 +52,7 @@ public:
      * @param time 需要seek的目标时间，单位为秒。
      * @param callback 完成后第一时间的回调。
     */
-    void seek(double time);
-    void seek(double time, std::function<void(bool)> callback);
+    void seek(double time, std::function<void(bool)> callback = std::function<void(bool)>());
 
     /**
      * @brief 当前播放时间

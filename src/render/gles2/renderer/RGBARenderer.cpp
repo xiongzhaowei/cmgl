@@ -52,7 +52,6 @@ void RGBARenderer::draw(
     const mat4 &colorConversion,
     const vec2 &size,
     GLfloat alpha,
-    GLuint texture,
     va_list list
 ) {
     context->setFramebuffer(framebuffer);
@@ -66,7 +65,7 @@ void RGBARenderer::draw(
             0, 1, 2, 1, 2, 3
     };
     _program->use();
-    _program->setUniformTexture(_textureLocation, 1, texture);
+    _program->setUniformTexture(_textureLocation, 1, va_arg(list, GLuint));
     _program->setUniform(_globalMatrixLocation, globalMatrix);
     _program->setUniform(_localMatrixLocation, localMatrix);
     _program->setUniform(_clipMatrixLocation, clipMatrix);

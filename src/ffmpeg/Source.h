@@ -21,10 +21,11 @@ class MovieSource : public Stream<Packet> {
     RefPtr<Packet> _packet;
     RefPtr<MovieFile> _file;
     AVFormatContext* _context = nullptr;
+    std::mutex _mutex;
     mutable std::function<bool(bool)> _available;
 public:
     MovieSource();
-    MovieSource(std::function<bool(bool)> available);
+    MovieSource(const std::function<bool(bool)>& available);
     bool open(RefPtr<MovieFile> file);
     bool open(const std::string& filename);
     void close();
@@ -36,6 +37,7 @@ public:
     bool read();
     bool seek(double time);
     void skip(const std::function<bool(AVPacket*)>& skipWhere);
+    void flush();
 
     RefPtr<StreamSubscription> listen(RefPtr<StreamConsumer<Packet>> consumer) override;
 };
@@ -52,12 +54,15 @@ public:
     typedef Frame Target;
 
     void add(RefPtr<Packet> packet) override;
-    void addError() override;
+    void addError(RefPtr<Error> error) override;
     void close() override;
     bool available() const override;
+    bool flush() override;
+    void clear() override;
 
     AVStream* stream() const;
     AVCodecContext* context() const;
+    RefPtr<Frame> decode();
 
     static RefPtr<MovieDecoder> from(RefPtr<StreamConsumer<Frame>> output, AVStream* stream, AVDictionary* options = nullptr);
 };
@@ -65,7 +70,7 @@ public:
 class MovieSourceStream : public Stream<Frame> {
     RefPtr<StreamSubscription> _subscription;
     RefPtr<StreamController<Frame>> _controller;
-    WeakPtr<MovieDecoder> _decoder;
+    RefPtr<MovieDecoder> _decoder;
     MovieSourceStream(RefPtr<StreamController<Frame>> controller, RefPtr<MovieDecoder> decoder, RefPtr<StreamSubscription> subscription);
 public:
     ~MovieSourceStream();
@@ -75,18 +80,41 @@ public:
     AVStream* stream() const;
     AVCodecContext* context() const;
     bool available() const;
+    RefPtr<Frame> decode();
 
     RefPtr<Stream<Frame>> convert(AVSampleFormat sample_fmt, AVChannelLayout ch_layout, int32_t sample_rate);
     RefPtr<Stream<Frame>> convert(AVSampleFormat format);
     RefPtr<Stream<Frame>> convert(AVPixelFormat format);
 
-    static RefPtr<MovieSourceStream> from(RefPtr<MovieSource> source, AVStream* stream, AVDictionary* options = nullptr);
+    static RefPtr<MovieSourceStream> from(RefPtr<Stream<Packet>> source, AVStream* stream, AVDictionary* options = nullptr);
     static RefPtr<MovieSourceStream> audio(RefPtr<MovieSource> source, AVDictionary* options = nullptr);
     static RefPtr<MovieSourceStream> video(RefPtr<MovieSource> source, AVDictionary* options = nullptr);
 };
 
+class MovieCachedPacketConsumer : public StreamConsumer<Packet> {
+    mutable std::mutex _mutex;
+    mutable std::function<bool(size_t)> _available;
+    int32_t _index;
+    std::list<RefPtr<Packet>> _list;
+    RefPtr<StreamConsumer<Packet>> _output;
+public:
+    typedef Packet Target;
+
+    MovieCachedPacketConsumer(RefPtr<StreamConsumer<Packet>> output, const std::function<bool(size_t)>& available, int32_t index);
+
+    void add(RefPtr<Packet> packet) override;
+    void addError(RefPtr<Error> error) override;
+    void close() override;
+    bool available() const override;
+
+    bool empty();
+    bool flush();
+    void clear();
+};
+
 class MovieBufferedConsumer : public StreamConsumer<Frame> {
     uint32_t _maxCount;
+    bool _isEndOfFile;
     mutable std::mutex _mutex;
     std::list<RefPtr<Frame>> _list;
     RefPtr<Converter<Frame>> _converter;
@@ -95,10 +123,12 @@ public:
     MovieBufferedConsumer(RefPtr<Stream<Frame>> stream, uint32_t maxCount);
 
     void add(RefPtr<Frame> frame) override;
-    void addError() override;
+    void addError(RefPtr<Error> error) override;
     void close() override;
     bool available() const override;
+    bool flush() override;
 
+    bool eof() const;
     size_t size() const;
     int64_t timestamp() const;
 
@@ -121,9 +151,11 @@ public:
     typedef Packet Target;
 
     void add(RefPtr<Frame> frame) override;
-    void addError() override;
+    void addError(RefPtr<Error> error) override;
     void close() override;
     bool available() const override;
+    bool flush() override;
+    void clear() override;
 
     AVStream* stream() const;
     AVCodecContext* context() const;
@@ -139,9 +171,11 @@ public:
     ~MovieTarget();
 
     void add(RefPtr<Packet> packet) override;
-    void addError() override;
+    void addError(RefPtr<Error> error) override;
     void close() override;
     bool available() const override;
+    bool flush() override;
+    void clear() override;
 
     AVFormatContext* context() const;
     RefPtr<MovieEncoder> encoder(int32_t bit_rate, AVSampleFormat format, int32_t sample_rate, AVChannelLayout ch_layout, AVDictionary* options = nullptr);
@@ -158,9 +192,11 @@ public:
 class EmptyTarget : public StreamConsumer<Frame> {
 public:
     void add(RefPtr<Frame> frame) override {}
-    void addError() override {}
+    void addError(RefPtr<Error> error) override {}
     void close() override {}
     bool available() const override { return true; }
+    bool flush() override { return true; }
+    void clear() override {}
 };
 
 OMP_FFMPEG_NAMESPACE_END

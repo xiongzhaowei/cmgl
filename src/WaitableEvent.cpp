@@ -22,3 +22,10 @@ bool WaitableEvent::wait(const std::function<bool()>& pred, std::chrono::steady_
     std::unique_lock<std::mutex> lock(_mutex);
     return _notify.wait_until(lock, timeout, pred);
 }
+
+bool WaitableEvent::wait(const std::function<void(RefPtr<WaitableEvent> event)>& callback, double timeout) {
+    RefPtr<WaitableEvent> event = new WaitableEvent;
+    std::unique_lock<std::mutex> lock(event->_mutex);
+    callback(event);
+    return event->_notify.wait_for(lock, std::chrono::microseconds(int64_t(timeout * std::chrono::microseconds::period::den))) == std::cv_status::no_timeout;
+}

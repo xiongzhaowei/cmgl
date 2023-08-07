@@ -20,7 +20,6 @@ struct YUV420PRenderer : public Renderer {
         const mat4 &colorConversion,
         const vec2 &size,
         GLfloat alpha,
-        GLuint texture,
         va_list list
     ) override;
 

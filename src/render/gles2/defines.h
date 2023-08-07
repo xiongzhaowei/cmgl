@@ -38,6 +38,7 @@
 #include "Texture.h"
 #include "Window.h"
 #include "TextureFramebuffer.h"
+#include "renderer/RECTRenderer.h"
 #include "renderer/RGBARenderer.h"
 #include "renderer/YUV420PRenderer.h"
 #include "renderer/YUV420SPRenderer.h"

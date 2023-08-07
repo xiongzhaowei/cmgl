@@ -13,14 +13,15 @@ public:
     std::string method;
     int32_t line;
 
-    void print();
-
     static bool verify(int error, const char* method, int line);
     static void report(int error, const char* method, int line);
 };
 
 class AVError : public Error {
+public:
+    AVError(int error, const char* method, int line);
 
+    static RefPtr<Error> from(int error, const char* method, int line);
 };
 
 OMP_FFMPEG_NAMESPACE_END

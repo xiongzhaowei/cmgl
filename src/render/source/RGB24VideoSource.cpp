@@ -30,10 +30,14 @@ void RGB24VideoSource::update(const AVFrame *frame) {
 
     int32_t width = frame->width;
     int32_t height = frame->height;
-    int32_t size = width * height * 3;
+    int32_t stride = ((width * 3 - 1) | 3) + 1;
+    int32_t linesize = frame->linesize[0];
+    int32_t size = stride * height;
 
     _pixels.resize(size);
-    memcpy(_pixels.data(), frame->data[0], size);
+    for (int32_t y = 0; y < height; y++) {
+        memcpy(_pixels.data() + stride * y, frame->data[0] + linesize * y, width * 3);
+    }
 
     _size = ivec2(width, height);
     _isNeedsUpdate = true;

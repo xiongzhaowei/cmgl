@@ -14,6 +14,7 @@ struct Renderer : public Resource {
 
     typedef enum {
         None,
+        RECT,
         RGBA,
         YUV420P,
         YUV420SP,
@@ -34,7 +35,6 @@ struct Renderer : public Resource {
         const mat4 &colorConversion,
         const vec2 &size,
         float alpha,
-        uint32_t texture,
         va_list list
     ) = 0;
 

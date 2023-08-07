@@ -1,4 +1,6 @@
 
+#pragma once
+
 OMP_UI_WINDOWS_NAMESPACE_BEGIN
 
 class NCHitTestView : public View {
@@ -25,13 +27,38 @@ public:
 
 	void* handle() const override { return _hWnd; }
 
+	Color backgroundColor() const override {
+		Color result(0xFF000000);
+		if (_eglWindow) {
+			glm::vec3 color = _eglWindow->backgroundColor();
+			result.r = (uint8_t)round(color.r * 255);
+			result.g = (uint8_t)round(color.g * 255);
+			result.b = (uint8_t)round(color.b * 255);
+		}
+		return result;
+	}
+	void setBackgroundColor(Color color) override {
+		if (_eglWindow) {
+			glm::vec3 value;
+			value.r = color.r / 255.0f;
+			value.g = color.g / 255.0f;
+			value.b = color.b / 255.0f;
+			_eglWindow->setBackgroundColor(value);
+		}
+	}
+
 	bool render(std::function<void(render::egl::EGLRenderContext*)> callback) override {
 		if (!_eglContext) return false;
 		if (!_eglWindow) return false;
 
 		callback(_eglContext);
 		layoutIfNeeded();
-		if (_layer && _renderLayer) _layer.cast<gdiplus::Layer>()->paint(_renderLayer);
+		if (_layer && _renderLayer) {
+			RefPtr<gdiplus::Layer> gdiLayer = _layer.as<gdiplus::Layer>();
+			if (gdiLayer != nullptr) {
+				gdiLayer->paint(_renderLayer);
+			}
+		}
 		_eglContext->render();
 		return true;
 	}

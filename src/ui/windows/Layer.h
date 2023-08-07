@@ -4,6 +4,7 @@ OMP_UI_WINDOWS_NAMESPACE_BEGIN
 
 namespace gdiplus {
     class Token;
+	class ImageData;
     class Image;
     class Matrix;
     class Path;
@@ -54,6 +55,18 @@ public:
 	friend class Graphics;
 };
 
+class gdiplus::ImageData : public ui::ImageData {
+	RefPtr<Token> m_spToken = Token::Get();
+	Gdiplus::Bitmap* m_pImage;
+public:
+	ImageData(Gdiplus::Bitmap* pImage);
+	~ImageData();
+
+	float width() const override { return (float)m_pImage->GetWidth(); }
+	float height() const override { return (float)m_pImage->GetHeight(); }
+	void load(const std::function<void(int32_t width, int32_t height, int32_t stride, void* bytes)>& callback) override;
+};
+
 class gdiplus::Image : public ui::Image {
 	RefPtr<Token> m_spToken = Token::Get();
 	Gdiplus::Bitmap* m_pImage;
@@ -62,8 +75,8 @@ public:
 	~Image();
 
 	Gdiplus::Bitmap* Bitmap() const { return m_pImage; }
-	float Width() const override { return (float)m_pImage->GetWidth(); }
-	float Height() const override { return (float)m_pImage->GetHeight(); }
+	float width() const override { return (float)m_pImage->GetWidth(); }
+	float height() const override { return (float)m_pImage->GetHeight(); }
 
 	static RefPtr<Image> FromFile(LPCWSTR lpszPath);
 	static RefPtr<Image> FromHICON(HICON hIcon);
@@ -153,7 +166,7 @@ class gdiplus::StaticLayer : public Object {
 	float m_fShadowRadius = 0.0f;
 	float m_fShadowOffsetX = 0.0f;
 	float m_fShadowOffsetY = 0.0f;
-
+	bool m_bHidden = false;
 public:
 	static RefPtr<StaticLayer> Create(uint16_t nWidth, uint16_t nHeight);
 
@@ -195,6 +208,9 @@ public:
 
 	Image* Content() const;
 	void SetContent(Image* pImage);
+
+	bool Hidden() const;
+	void SetHidden(bool hidden);
 
 	void SetNeedsDisplay();
 
@@ -249,8 +265,11 @@ public:
 	float shadowRadius() const override;
 	void setShadowRadius(float radius) override;
 
-	void* content() const override;
-	void setContent(void* image) override;
+	Object* content() const override;
+	void setContent(Object* image) override;
+
+	bool hidden() const;
+	void setHidden(bool hidden);
 
 	void setNeedsDisplay() override;
 

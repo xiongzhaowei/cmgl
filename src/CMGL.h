@@ -11,10 +11,10 @@
 #include "render/defines.h"
 #include "render/gles2/defines.h"
 #include "render/microsoft/defines.h"
-#include "thread/defines.h"
 #include "ffmpeg/defines.h"
 #include "ui/defines.h"
 #include "ui/windows/defines.h"
+#include "ui/windows/render/defines.h"
 
 #ifdef __cplusplus
 

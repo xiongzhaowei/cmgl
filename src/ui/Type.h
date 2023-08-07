@@ -55,11 +55,18 @@ enum class TextVerticalAlignment {
 
 class Image : public Object {
 public:
-	virtual float Width() const = 0;
-	virtual float Height() const = 0;
+	virtual float width() const = 0;
+	virtual float height() const = 0;
 
 	static RefPtr<Image> file(const std::wstring& path);
 	static RefPtr<ui::Image> argb(uint32_t width, uint32_t height, const std::function<COLORREF(uint32_t x, uint32_t y)>& colors);
+};
+
+class ImageData : public Object {
+public:
+    virtual float width() const = 0;
+    virtual float height() const = 0;
+    virtual void load(const std::function<void(int32_t width, int32_t height, int32_t stride, void* bytes)>& callback) = 0;
 };
 
 typedef struct tagMSG NativeEvent;
